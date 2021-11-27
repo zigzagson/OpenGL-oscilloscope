@@ -11,7 +11,7 @@
 #include <windows.h>
 #include <cmath>
 
-#define DEBUG 1
+#define DEBUG 0
 
 using namespace std;
 
@@ -256,7 +256,8 @@ UINT Receive_Data(LPVOID lpVoid)
     {
         if (wavePause)
             continue;
-        FPGA.SendMsg(timeExponent);
+        FPGA.ClearBuffer();
+        FPGA.SendMsg(DATA_SIZE, timeExponent);
         for (int i = 0; i < DATA_SIZE / 1024; i++)
         {
             FPGA.ReceiveData((char *)(dataBuf + i * 1024), 1024);

@@ -23,15 +23,15 @@ BOOL UDPconnector::EstablishConnection()
     this->lower_IP = inet_ntoa(fpgaIpAddr);
     memcpy(this->lower_MAC, recvResBuf + 5, 6); //获取FPGA的MAC地址
     return true;
-    //printf("FPGA的IP地址：\t%s\n", this->lower_IP);
-    //printf("FPGA的MAC地址：\t%hhX:%hhX:%hhX:%hhX:%hhX:%hhX\n", FPGA_MAC[0], FPGA_MAC[1], FPGA_MAC[2], FPGA_MAC[3], FPGA_MAC[4], FPGA_MAC[5]);
 }
-void UDPconnector::SendMsg(char parameter)
+void UDPconnector::SendMsg(unsigned int size, char step)
 {
     //发出控制信号
-    char sendCtlBuf[CTL] = {0x28, 0, 1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 32, 0, 0};
-    sendCtlBuf[CTL - 1] = parameter;
-    memcpy(sendCtlBuf + 5, this->lower_MAC, 6);
+    char sendCtlBuf[CTL] = {0x28, 0, 1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0};
+    memcpy(sendCtlBuf + 5, this->lower_MAC, 6); //添加MAC信息
+    sendCtlBuf[CTL - 1] = step;                 //添加时机信息
+    for (int i = 0; i < 4; i++)                 //添加采样次数信息
+        sendCtlBuf[15 + i] = ((char *)&size)[3 - i];
     sendto(this->Upper, sendCtlBuf, CTL, 0, (struct sockaddr *)&this->brdctAddr, sizeof(this->brdctAddr));
 }
 void UDPconnector::ReceiveData(char *buffer, int size)
@@ -60,8 +60,19 @@ void UDPconnector::ReceiveData(char *buffer, int size)
         }
     }
 }
+void UDPconnector::ClearBuffer()
+{
+    //清除缓冲
+    struct sockaddr fromAddr;
+    int addrLen = sizeof(fromAddr);
+    char recvDtaBuf[DTA];
+    while (recvfrom(this->Upper, recvDtaBuf, DTA, 0, &fromAddr, &addrLen) > 0)
+    {
+    }
+}
 string UDPconnector::lowerMAC()
 {
+    //转成16进制的MAC地址字符串
     string MAC;
     char ch;
     for (int i = 0; i < 6; i++)
@@ -73,7 +84,7 @@ string UDPconnector::lowerMAC()
         ch = ':';
         MAC += ch;
     }
-    MAC.erase(17);
+    MAC.erase(17); //删掉最后的冒号
     return MAC;
 }
 string UDPconnector::lowerIP()

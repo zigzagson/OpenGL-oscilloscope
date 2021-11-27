@@ -19,8 +19,9 @@ public:
     UDPconnector() {}
     BOOL ConnectionInit();      //连接初始化
     BOOL EstablishConnection(); //连接建立
-    void SendMsg(char parameter);
+    void SendMsg(unsigned int size, char step);
     void ReceiveData(char *buffer, int size);
+    void ClearBuffer();
     string lowerMAC();
     string lowerIP();
 
