@@ -30,7 +30,7 @@ void UDPconnector::SendMsg(unsigned int size, char step)
     char sendCtlBuf[CTL] = {0x28, 0, 1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0};
     memcpy(sendCtlBuf + 5, this->lower_MAC, 6); //添加MAC信息
     //sendCtlBuf[CTL - 1] = step;                 //添加时机信息
-    for (int i = 0; i < 4; i++) //添加采样次数信息
+    for (int i = 0; i < 4; i++)                 //添加采样次数信息
         sendCtlBuf[15 + i] = ((char *)&size)[3 - i];
     sendto(this->Upper, sendCtlBuf, CTL, 0, (struct sockaddr *)&this->brdctAddr, sizeof(this->brdctAddr));
 }
