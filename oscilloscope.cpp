@@ -256,13 +256,13 @@ UINT Receive_Data(LPVOID lpVoid)
     {
         if (wavePause)
             continue;
+        FPGA.ClearBuffer();
         FPGA.SendMsg(DATA_SIZE, timeExponent);
         for (int i = 0; i < DATA_SIZE / 1024; i++)
         {
             FPGA.ReceiveData((char *)(dataBuf + i * 1024), 1024);
             FPGA.ReceiveData((char *)(dataBuf + i * 1024 + 512), 1024);
         }
-        FPGA.ClearBuffer();
         for (int i = 0; i < DATA_SIZE; i++)
         {
             waveFormData[2 * i] = (float)i;

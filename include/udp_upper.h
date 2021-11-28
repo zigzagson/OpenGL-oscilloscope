@@ -8,7 +8,7 @@
 
 #define INQ 5    //询问信号字节数
 #define RES 27   //应答信号字节数
-#define CTL 20   //控制信号字节数
+#define CTL 19   //控制信号字节数
 #define DTA 1029 //数据信号字节数
 
 using namespace std;
