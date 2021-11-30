@@ -22,9 +22,11 @@ void mouse_press_callback(GLFWwindow *window, int button, int action, int mods);
 void mouse_scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 
 void waveAutoSet();
+void dataTrig();
 UINT Receive_Data(LPVOID lpVoid);
 
-#define DATA_SIZE 8192
+#define DATA_SIZE 262144
+#define VIEW_DATA_SIZE 8192
 #define VIEWADLE_DATA_SIZE 600
 float scrWidth = 1200;
 float scrHeight = 750;
@@ -40,7 +42,8 @@ bool wavePause = false;
 
 GLFWwindow *window;
 BackgroundRender background;
-float waveFormData[DATA_SIZE * 2];
+float waveFormData[VIEW_DATA_SIZE * 2];
+float waveData[DATA_SIZE * 2];
 
 int main()
 {
@@ -48,7 +51,7 @@ int main()
     CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)Receive_Data, nullptr, 0, NULL);
     //OpenGL上下文属于单个线程，在其他线程没有上下文时不可以使用OpenGL函数
     WaveRenderer wave("shader/wave.vs", "shader/wave.fs");
-    wave.SetWaveAttribute(DATA_SIZE, VIEWADLE_DATA_SIZE, -5000, 5000);
+    wave.SetWaveAttribute(VIEW_DATA_SIZE, VIEWADLE_DATA_SIZE, -5000, 5000);
     background.BackgroundRenderInit(scrWidth, scrHeight);
     background.setSize(scrWidth, scrHeight, scrWidth * 0.1, scrHeight * 0.06, viewWidth, viewHeight);
     while (!glfwWindowShouldClose(window))
@@ -199,7 +202,9 @@ void waveAutoSet()
     float min, max;
     min = waveFormData[1];
     max = waveFormData[1];
-    for (int i = 1; i < DATA_SIZE; i++)
+    if (!(min == min && max == max))
+        return;
+    for (int i = 1; i < VIEW_DATA_SIZE; i++)
     {
         if (waveFormData[2 * i + 1] > max)
             max = waveFormData[2 * i + 1];
@@ -216,6 +221,30 @@ void waveAutoSet()
         scaleState = 1000.0f;
     offsetState.y = (max + min) / 2 / 10000.0f;
 }
+
+void dataTrig()
+{
+    float trigLevel = 0;
+    int trigNum = 0;
+    for (int i = 3000; i < DATA_SIZE - VIEW_DATA_SIZE; i++)
+    {
+        if ((waveData[2 * i + 1] > trigLevel) && (waveData[2 * i - 1] < trigLevel))
+        {
+            for (int j = 0; j < VIEW_DATA_SIZE; j++)
+            {
+                waveFormData[2 * j + 1] = waveData[2 * (i + j) + 1] + waveFormData[2 * j + 1];
+            }
+            i += VIEW_DATA_SIZE;
+            trigNum++;
+        }
+    }
+    for (int i = 0; i < VIEW_DATA_SIZE; i++)
+    {
+        waveFormData[2 * i] = (float)i;
+        waveFormData[2 * i + 1] /= trigNum;
+    }
+}
+
 #if DEBUG
 UINT Receive_Data(LPVOID lpVoid)
 {
@@ -224,7 +253,7 @@ UINT Receive_Data(LPVOID lpVoid)
         if (wavePause)
             continue;
         float timeValue = glfwGetTime();
-        for (unsigned i = 0; i < DATA_SIZE; i++)
+        for (unsigned i = 0; i < VIEW_DATA_SIZE; i++)
         {
             waveFormData[2 * i] = (float)i;
             waveFormData[2 * i + 1] = 300 * sin((float)i / 50.0f + timeValue) + 200;
@@ -265,9 +294,10 @@ UINT Receive_Data(LPVOID lpVoid)
         }
         for (int i = 0; i < DATA_SIZE; i++)
         {
-            waveFormData[2 * i] = (float)i;
-            waveFormData[2 * i + 1] = (float)dataBuf[i] * 5000.0f / 2048.0f;
+            waveData[2 * i] = (float)i;
+            waveData[2 * i + 1] = (float)dataBuf[i] * 5000.0f / 2048.0f;
         }
+        dataTrig();
         Sleep(500);
     }
     return 0;
