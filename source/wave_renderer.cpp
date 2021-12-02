@@ -47,7 +47,7 @@ void WaveRenderer::RenderWave(glm::vec2 offset, float xStep, float yScale, glm::
         end = this->dataSize;
     this->WaveShader.Use();
     glBindVertexArray(this->VAO);
-    this->WaveShader.SetVector4f("setColor", color.x, color.y, color.z, 1.0f);
+    this->WaveShader.SetVector3f("setColor", color);
     this->WaveShader.SetMatrix4fv("projection", projection);
     glDrawArrays(GL_LINE_STRIP, start, end - start);
 }

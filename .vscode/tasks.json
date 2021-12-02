@@ -27,6 +27,7 @@
                 //"./lib/freetype.lib",         //链接库
                 "-lglfw3dll", //链接库
                 "-lglad", //链接库
+                "-ljsoncpp",
                 "./lib/freetype.lib", //链接库
                 "-lwsock32" //winsock编程要这个
                 // "-std=c11", // 要用的语言标准，根据自己的需要修改。c++可用c++14

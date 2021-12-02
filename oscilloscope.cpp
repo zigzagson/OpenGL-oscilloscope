@@ -3,19 +3,22 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <json/json.h>
 
 #include "udp_upper.h"
 #include "wave_renderer.h"
 #include "draw_background.h"
 #include <iostream>
+#include <fstream>
 #include <windows.h>
 #include <cmath>
 
-#define DEBUG 0
+#define DEBUG 1
 
 using namespace std;
 
 void windowInit();
+void configurationInit();
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void mouse_cursor_callback(GLFWwindow *window, double xpos, double ypos);
 void mouse_press_callback(GLFWwindow *window, int button, int action, int mods);
@@ -52,15 +55,19 @@ BackgroundRender background;
 float waveFormData[VIEW_DATA_SIZE * 2];
 float waveData[DATA_SIZE * 2];
 
+glm::vec3 backgroundColor(0.1f, 0.1f, 0.1f);
+glm::vec3 waveColor(1.0f, 1.0f, 0.0f);
+glm::vec4 iconColor(0.8f, 0.8f, 0.8f, 1.0f);
+glm::vec4 iconClickColor(1.0f, 1.0f, 1.0f, 0.0f);
+
 int main()
 {
     windowInit();
     threadHandle = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)Receive_Data, nullptr, 0, NULL);
     //OpenGL上下文属于单个线程，在其他线程没有上下文时不可以使用OpenGL函数
+    configurationInit();
     WaveRenderer wave("shader/wave.vs", "shader/wave.fs");
     wave.SetWaveAttribute(VIEW_DATA_SIZE, VIEWADLE_DATA_SIZE, -5000, 5000);
-    background.BackgroundRenderInit(scrWidth, scrHeight);
-    background.setSize(scrWidth, scrHeight, scrWidth * 0.1, scrHeight * 0.06, viewWidth, viewHeight);
     while (!glfwWindowShouldClose(window))
     {
 #if DEBUG
@@ -69,10 +76,10 @@ int main()
 #endif
         if (!wavePause)
             wave.ResetWaveData(waveFormData, sizeof(waveFormData));
-        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+        glClearColor(backgroundColor.x, backgroundColor.y, backgroundColor.z, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
         background.drawBackground(timeStep, timeExponent, scaleState, offsetState.y + offset.y, trigLevel + trigLevelState); //画网格
-        wave.RenderWave(offsetState + offset, timeStep, scaleState, glm::vec3(1.0f, 1.0f, 0.0f));                            //画波形
+        wave.RenderWave(offsetState + offset, timeStep, scaleState, waveColor);                                              //画波形
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
@@ -105,6 +112,65 @@ void windowInit()
         std::cout << "Failed to initialize GLAD" << std::endl;
         return;
     }
+    background.BackgroundRenderInit(scrWidth, scrHeight);
+    background.setSize(scrWidth, scrHeight, scrWidth * 0.1, scrHeight * 0.06, viewWidth, viewHeight);
+    background.iconTexture.color = iconColor;
+}
+void configurationInit()
+{
+    std::ifstream ifs;
+    ifs.open("init.json", std::ios::in);
+    if (false == ifs.is_open())
+    {
+        ifs.close();
+        std::ofstream ofs;
+        ofs.open("init.json", std::ios::out);
+        Json::StreamWriterBuilder writerBuilder;
+        const std::unique_ptr<Json::StreamWriter> writer(writerBuilder.newStreamWriter());
+        Json::Value root;
+        Json::Value color;
+        for (int i = 0; i < 3; i++)
+        {
+            color["background"].append(0.1f);
+            color["bordor"].append(0.9f);
+            color["grid"].append(0.6f);
+            color["text"].append(0.9f);
+            color["icon"].append(0.8f);
+            color["iconClick"].append(1.0f);
+        }
+        color["icon"].append(1.0f);
+        color["iconClick"].append(0.0f);
+        color["wave"].append({1.0f});
+        color["wave"].append(1.0f);
+        color["wave"].append(0.0f);
+        color["trig"].append(0.9f);
+        color["trig"].append(0.3f);
+        color["trig"].append(0.1f);
+        root["color"] = color;
+        writer->write(root, &ofs);
+        ofs.close();
+        return;
+    }
+    Json::Value root;
+    Json::CharReaderBuilder readerBuilder;
+    JSONCPP_STRING errs;
+    if (!parseFromStream(readerBuilder, ifs, &root, &errs))
+    {
+        std::cout << errs << std::endl;
+        system("pause");
+        return;
+    }
+    Json::Value color = root["color"];
+    backgroundColor = glm::vec3(color["background"][0].asFloat(), color["background"][1].asFloat(), color["background"][2].asFloat());
+    waveColor = glm::vec3(color["wave"][0].asFloat(), color["wave"][1].asFloat(), color["wave"][2].asFloat());
+    iconColor = glm::vec4(color["icon"][0].asFloat(), color["icon"][1].asFloat(), color["icon"][2].asFloat(), color["icon"][3].asFloat());
+    iconClickColor = glm::vec4(color["iconClick"][0].asFloat(), color["iconClick"][1].asFloat(), color["iconClick"][2].asFloat(), color["iconClick"][3].asFloat());
+    background.borderColor = glm::vec3(color["bordor"][0].asFloat(), color["bordor"][1].asFloat(), color["bordor"][2].asFloat());
+    background.gridColor = glm::vec3(color["grid"][0].asFloat(), color["grid"][1].asFloat(), color["grid"][2].asFloat());
+    background.textColor = glm::vec3(color["text"][0].asFloat(), color["text"][1].asFloat(), color["text"][2].asFloat());
+    background.trigLineColor = glm::vec3(color["trig"][0].asFloat(), color["trig"][1].asFloat(), color["trig"][2].asFloat());
+    background.iconTexture.color = iconColor;
+    ifs.close();
 }
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height)
@@ -159,7 +225,7 @@ void mouse_press_callback(GLFWwindow *window, int button, int action, int mods)
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
     {
         duration = glfwGetTime();
-        background.iconTexture.color = glm::vec4(1.0f, 1.0f, 1.0f, 0.0f);
+        background.iconTexture.color = iconClickColor;
     }
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_RELEASE)
     {
@@ -177,19 +243,23 @@ void mouse_press_callback(GLFWwindow *window, int button, int action, int mods)
         }
         else
             waveAutoSet(); //右键长按autoset
-        background.iconTexture.color = glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
+        background.iconTexture.color = iconColor;
     }
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
     {
         if (Rsquare < scrWidth * 0.06 * scrWidth * 0.06)
         {
-            background.iconTexture.color = glm::vec4(1.0f, 1.0f, 1.0f, 0.0f);
+            background.iconTexture.color = iconClickColor;
             waveAutoSet(); //左键点图标autoset
         }
     }
+    if (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS)
+    {
+        configurationInit();
+    }
     if (action == GLFW_RELEASE)
     {
-        background.iconTexture.color = glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
+        background.iconTexture.color = iconColor;
     }
 }
 void mouse_cursor_callback(GLFWwindow *window, double xpos, double ypos)

@@ -206,7 +206,7 @@ void BackgroundRender::drawBackground(float xStep, int xExponent, float yScale, 
         int value = (int)(((int)(offset * 10000 / pow(10, yExponent) / yStep) + i - 5) * yStep * 10) * pow(10, yExponent - 1); //因为浮点数精度多了点麻烦
         int x = this->viewportX - this->fontSize * 1.25;
         int y = this->viewportY + this->viewportH / 2 + ((float)i - 5.0 - fmod(offset * yScale / yZoom, 0.1) * 10.0) * this->viewportH * 0.1 * yZoom - this->fontSize / 2;
-        this->valueText.RenderTextAlignRight(std::to_string(value), x, y, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+        this->valueText.RenderTextAlignRight(std::to_string(value), x, y, 1.0f, this->textColor);
     }
     std::string parameter = "TIME/DIV: ";
     if ((xExponent == 2 || xExponent == 5) && xStep == 10)
