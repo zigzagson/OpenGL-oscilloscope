@@ -22,6 +22,8 @@ public:
     void BackgroundRenderInit(float scrWidth, float scrHeight);
     void drawBackground(float xStep, int xExponent, float yScale, float offset);
     void setSize(float scrWidth, float scrHeight, float viewportX, float viewportY, float viewportW, float viewportH);
+    bool ifPause;
+    bool ifTrig;
 
 private:
     void BackgroundBorderInit();

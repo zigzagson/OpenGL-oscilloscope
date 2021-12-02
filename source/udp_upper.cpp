@@ -32,7 +32,8 @@ void UDPconnector::SendMsg(unsigned int size, char step)
     //sendCtlBuf[CTL - 1] = step;                 //添加时机信息
     for (int i = 0; i < 4; i++) //添加采样次数信息
         sendCtlBuf[15 + i] = ((char *)&size)[3 - i];
-    sendto(this->Upper, sendCtlBuf, CTL, 0, (struct sockaddr *)&this->brdctAddr, sizeof(this->brdctAddr));
+    if (sendto(this->Upper, sendCtlBuf, CTL, 0, (struct sockaddr *)&this->brdctAddr, sizeof(this->brdctAddr)) == 0)
+        cout << "连接中断" << endl;
 }
 void UDPconnector::ReceiveData(char *buffer, int size)
 {
@@ -69,6 +70,10 @@ void UDPconnector::ClearBuffer()
     while (recvfrom(this->Upper, recvDtaBuf, DTA, 0, &fromAddr, &addrLen) > 0)
     {
     }
+}
+void UDPconnector::Close()
+{
+    closesocket(this->Upper);
 }
 string UDPconnector::lowerMAC()
 {

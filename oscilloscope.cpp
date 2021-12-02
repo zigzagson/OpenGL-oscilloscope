@@ -24,6 +24,7 @@ void mouse_scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 void waveAutoSet();
 void dataTrig();
 UINT Receive_Data(LPVOID lpVoid);
+void threadRestart();
 
 #define DATA_SIZE 262144
 #define VIEW_DATA_SIZE 8192
@@ -39,7 +40,12 @@ glm::vec2 offset(0.0f, 0.0f);
 float timeStep = 1;
 int timeExponent = 0;
 bool wavePause = false;
+bool waveTrig = false;
+bool waveDraw = true;
 
+HANDLE threadHandle;
+unsigned threadCount = 0;
+unsigned threadNum = 0;
 GLFWwindow *window;
 BackgroundRender background;
 float waveFormData[VIEW_DATA_SIZE * 2];
@@ -48,7 +54,7 @@ float waveData[DATA_SIZE * 2];
 int main()
 {
     windowInit();
-    CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)Receive_Data, nullptr, 0, NULL);
+    threadHandle = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)Receive_Data, nullptr, 0, NULL);
     //OpenGL上下文属于单个线程，在其他线程没有上下文时不可以使用OpenGL函数
     WaveRenderer wave("shader/wave.vs", "shader/wave.fs");
     wave.SetWaveAttribute(VIEW_DATA_SIZE, VIEWADLE_DATA_SIZE, -5000, 5000);
@@ -56,12 +62,14 @@ int main()
     background.setSize(scrWidth, scrHeight, scrWidth * 0.1, scrHeight * 0.06, viewWidth, viewHeight);
     while (!glfwWindowShouldClose(window))
     {
+        threadRestart();
         if (!wavePause)
             wave.ResetWaveData(waveFormData, sizeof(waveFormData));
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
-        background.drawBackground(timeStep, timeExponent, scaleState, offsetState.y + offset.y);  //画网格
-        wave.RenderWave(offsetState + offset, timeStep, scaleState, glm::vec3(1.0f, 1.0f, 0.0f)); //画波形
+        background.drawBackground(timeStep, timeExponent, scaleState, offsetState.y + offset.y); //画网格
+        if (waveDraw)
+            wave.RenderWave(offsetState + offset, timeStep, scaleState, glm::vec3(1.0f, 1.0f, 0.0f)); //画波形
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
@@ -142,6 +150,9 @@ void mouse_scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 void mouse_press_callback(GLFWwindow *window, int button, int action, int mods)
 {
     static float duration;
+    double posX, posY;
+    glfwGetCursorPos(window, &posX, &posY);
+    float Rsquare = (posX - scrWidth * 0.9) * (posX - scrWidth * 0.9) + (posY - scrWidth * 0.1) * (posY - scrWidth * 0.1);
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
     {
         duration = glfwGetTime();
@@ -151,23 +162,24 @@ void mouse_press_callback(GLFWwindow *window, int button, int action, int mods)
     {
         duration = glfwGetTime() - duration;
         if (duration < 0.6f)
-            wavePause = !wavePause;
+        {
+            if (Rsquare < scrWidth * 0.06 * scrWidth * 0.06)
+                waveTrig = !waveTrig; //右键点击图标开启触发
+            else
+                wavePause = !wavePause; //右键点击图标外暂停
+            background.ifPause = wavePause;
+            background.ifTrig = waveTrig;
+        }
         else
-            waveAutoSet();
+            waveAutoSet(); //右键长按autoset
         background.iconTexture.color = glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
     }
-    if (button == GLFW_MOUSE_BUTTON_LEFT)
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
     {
-        double posX, posY;
-        glfwGetCursorPos(window, &posX, &posY);
-        float Rsquare = (posX - scrWidth * 0.9) * (posX - scrWidth * 0.9) + (posY - scrWidth * 0.1) * (posY - scrWidth * 0.1);
         if (Rsquare < scrWidth * 0.06 * scrWidth * 0.06)
         {
-            if (action == GLFW_PRESS)
-            {
-                background.iconTexture.color = glm::vec4(1.0f, 1.0f, 1.0f, 0.0f);
-                waveAutoSet();
-            }
+            background.iconTexture.color = glm::vec4(1.0f, 1.0f, 1.0f, 0.0f);
+            waveAutoSet(); //左键点图标autoset
         }
     }
     if (action == GLFW_RELEASE)
@@ -179,7 +191,7 @@ void mouse_cursor_callback(GLFWwindow *window, double xpos, double ypos)
 {
     static float firstX, firstY;
     static bool firstPress = true;
-    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE)
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE) //左键拖动
     {
         offsetState += offset;
         offset.x = 0;
@@ -224,24 +236,83 @@ void waveAutoSet()
 
 void dataTrig()
 {
+    if (waveTrig)
+    {
+        float trigLevel = 0;
+        int trigNum = 0;
+        waveDraw = true;
+        for (int i = 3000; i < DATA_SIZE - VIEW_DATA_SIZE; i++)
+        {
+            if ((waveData[2 * i + 1] > trigLevel) && (waveData[2 * i - 1] < trigLevel))
+            {
+                for (int j = 0; j < VIEW_DATA_SIZE; j++)
+                {
+                    waveFormData[2 * j + 1] = waveData[2 * (i + j) + 1] + waveFormData[2 * j + 1];
+                }
+                i += VIEW_DATA_SIZE;
+                trigNum++;
+            }
+        }
+        if (trigNum == 0)
+        {
+            waveDraw = false;
+            return;
+        }
+        for (int i = 0; i < VIEW_DATA_SIZE; i++)
+        {
+            waveFormData[2 * i] = (float)i;
+            waveFormData[2 * i + 1] /= trigNum;
+        }
+    }
+    else
+    {
+        for (int i = 0; i < VIEW_DATA_SIZE; i++)
+        {
+            waveFormData[2 * i] = (float)i;
+            waveFormData[2 * i + 1] = waveData[2 * (i + 3000) + 1];
+        }
+    }
+}
+
+void dataTrig_no()
+{
+    int i = 0;
     float trigLevel = 0;
-    int trigNum = 0;
-    for (int i = 3000; i < DATA_SIZE - VIEW_DATA_SIZE; i++)
+    for (i = 3000; i < DATA_SIZE - VIEW_DATA_SIZE; i++)
     {
         if ((waveData[2 * i + 1] > trigLevel) && (waveData[2 * i - 1] < trigLevel))
         {
-            for (int j = 0; j < VIEW_DATA_SIZE; j++)
-            {
-                waveFormData[2 * j + 1] = waveData[2 * (i + j) + 1] + waveFormData[2 * j + 1];
-            }
-            i += VIEW_DATA_SIZE;
-            trigNum++;
+            break;
         }
     }
-    for (int i = 0; i < VIEW_DATA_SIZE; i++)
+    for (int j = 0; j < VIEW_DATA_SIZE; j++)
     {
-        waveFormData[2 * i] = (float)i;
-        waveFormData[2 * i + 1] /= trigNum;
+        waveFormData[2 * j] = (float)j;
+        waveFormData[2 * j + 1] = waveData[2 * (i + j) + 1];
+    }
+}
+
+void threadRestart()
+{
+    static float duration = glfwGetTime();
+    static unsigned times = 0;
+    if (times != threadCount)
+    {
+        times = threadCount;
+        duration = glfwGetTime();
+    }
+    else
+    {
+        if ((glfwGetTime() - duration) > 3.0f)
+        {
+            threadNum++;
+            cout << "第" << threadNum << "次重新连接" << endl;
+            cout << "时间：" << glfwGetTime() << endl;
+            TerminateThread(threadHandle, EXIT_FAILURE);
+            CloseHandle(threadHandle);
+            threadHandle = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)Receive_Data, nullptr, 0, NULL);
+            duration = glfwGetTime();
+        }
     }
 }
 
@@ -263,24 +334,27 @@ UINT Receive_Data(LPVOID lpVoid)
     return 0;
 }
 #else
+UDPconnector FPGA;
 UINT Receive_Data(LPVOID lpVoid)
 {
-    UDPconnector FPGA;
-    // 连接设置
-    if (FALSE == FPGA.ConnectionInit())
+    if (threadNum == 0)
     {
-        printf("未设置成功\n");
-        return 1;
+        // 连接设置
+        if (FALSE == FPGA.ConnectionInit())
+        {
+            printf("未设置成功\n");
+            return 1;
+        }
+        printf("等待下位机连接...\n");
+        while (FALSE == FPGA.EstablishConnection())
+        {
+        }
+        system("cls");
+        printf("下位机连接成功！\n");
+        cout << "FPGA的IP地址：\t" << FPGA.lowerIP() << endl;
+        cout << "FPGA的MAC地址：\t" << FPGA.lowerMAC() << endl;
     }
-    printf("等待下位机连接...\n");
-    while (FALSE == FPGA.EstablishConnection())
-    {
-    }
-    system("cls");
-    printf("下位机连接成功！\n");
-    cout << "FPGA的IP地址：\t" << FPGA.lowerIP() << endl;
-    cout << "FPGA的MAC地址：\t" << FPGA.lowerMAC() << endl;
-    static short dataBuf[DATA_SIZE];
+    short dataBuf[DATA_SIZE];
     while (TRUE)
     {
         if (wavePause)
@@ -298,6 +372,7 @@ UINT Receive_Data(LPVOID lpVoid)
             waveData[2 * i + 1] = (float)dataBuf[i] * 5000.0f / 2048.0f;
         }
         dataTrig();
+        threadCount++;
         Sleep(500);
     }
     return 0;

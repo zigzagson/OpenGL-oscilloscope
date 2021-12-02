@@ -210,6 +210,10 @@ void BackgroundRender::drawBackground(float xStep, int xExponent, float yScale, 
     else
         parameter += "s";
     this->valueText.RenderText(parameter, this->viewportX * 2, this->viewportY * 0.5 - this->fontSize / 2, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+    if (this->ifPause)
+        this->valueText.RenderText("pause", this->viewportX * 5, this->viewportY * 0.5 - this->fontSize / 2, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+    if (this->ifTrig)
+        this->valueText.RenderText("trigger", this->viewportX * 6, this->viewportY * 0.5 - this->fontSize / 2, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
     glDisable(GL_BLEND);
     glViewport(this->viewportX, this->viewportY, this->viewportW, this->viewportH);
     glm::mat4 transform;

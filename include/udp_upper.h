@@ -22,11 +22,12 @@ public:
     void SendMsg(unsigned int size, char step);
     void ReceiveData(char *buffer, int size);
     void ClearBuffer();
+    void Close();
     string lowerMAC();
     string lowerIP();
 
 private:
-    SOCKET Upper = INVALID_SOCKET;    // 上位机套接字
+    SOCKET Upper;    // 上位机套接字
     sockaddr_in brdctAddr, upperAddr; // 广播地址，上位机地址
     char lower_MAC[6] = {0};          //下位机MAC
     char *lower_IP;                   //下位机IP

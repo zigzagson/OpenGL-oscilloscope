@@ -54,6 +54,8 @@
         "vector": "cpp",
         "xlocbuf": "cpp",
         "xlocmes": "cpp",
-        "xloctime": "cpp"
+        "xloctime": "cpp",
+        "thread": "cpp",
+        "chrono": "cpp"
     }
 }
