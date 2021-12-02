@@ -20,10 +20,14 @@ public:
     Texture2D iconTexture;
     BackgroundRender() {}
     void BackgroundRenderInit(float scrWidth, float scrHeight);
-    void drawBackground(float xStep, int xExponent, float yScale, float offset);
+    void drawBackground(float xStep, int xExponent, float yScale, float offset, float trigLevel);
     void setSize(float scrWidth, float scrHeight, float viewportX, float viewportY, float viewportW, float viewportH);
     bool ifPause;
     bool ifTrig;
+    glm::vec3 borderColor;
+    glm::vec3 gridColor;
+    glm::vec3 trigLineColor;
+    glm::vec3 textColor;
 
 private:
     void BackgroundBorderInit();

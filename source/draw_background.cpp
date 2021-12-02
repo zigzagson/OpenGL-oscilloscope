@@ -9,6 +9,10 @@ void BackgroundRender::BackgroundRenderInit(float scrWidth, float scrHeight)
     this->iconTexture.color = glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
     this->fontSize = (GLuint)(scrWidth / 240) * 4;
     this->valueText.Load("fonts/arial.ttf", this->fontSize);
+    this->borderColor = glm::vec3(0.9f, 0.9f, 0.9f);
+    this->gridColor = glm::vec3(0.6f, 0.6f, 0.6f);
+    this->trigLineColor = glm::vec3(0.9f, 0.3f, 0.1f);
+    this->textColor = glm::vec3(0.9f, 0.9f, 0.9f);
     BackgroundBorderInit();
     BackgroundGriddingInit();
 }
@@ -42,7 +46,7 @@ void BackgroundRender::BackgroundBorderInit()
 void BackgroundRender::BackgroundGriddingInit()
 {
     int i = 0, j = 0;
-    float vertices[472] = {0};
+    float vertices[480] = {0};
     for (i = 0; i < 11; i++)
     {
         vertices[i * 4] = -1.0f;
@@ -77,8 +81,16 @@ void BackgroundRender::BackgroundGriddingInit()
             vertices[i * 16 + j * 4 + 283] = -1.2f;
         }
     }
-    unsigned int indices[236] = {0};
-    for (i = 0; i < 236; i++)
+    vertices[472] = -1.0f;
+    vertices[473] = 0.0f;
+    vertices[474] = 1.0f;
+    vertices[475] = 0.0f;
+    vertices[476] = 0.0f;
+    vertices[477] = -1.0f;
+    vertices[478] = 0.0f;
+    vertices[479] = 1.0f;
+    unsigned int indices[240] = {0};
+    for (i = 0; i < 240; i++)
     {
         indices[i] = i;
     }
@@ -114,7 +126,7 @@ void BackgroundRender::setSize(float scrWidth, float scrHeight, float viewportX,
     this->iconTexture.SetProjection(scrWidth, scrHeight);
     this->iconTexture.SetPosition(scrWidth * 0.84f, scrHeight - scrWidth * 0.16f, scrWidth * 0.12f, scrWidth * 0.12f);
 }
-void BackgroundRender::drawBackground(float xStep, int xExponent, float yScale, float offset)
+void BackgroundRender::drawBackground(float xStep, int xExponent, float yScale, float offset, float trigLevel)
 {
     float xZoom = 10 / xStep;
     if (xZoom >= 1.0 && xZoom < 2.0)
@@ -209,17 +221,18 @@ void BackgroundRender::drawBackground(float xStep, int xExponent, float yScale, 
         parameter += "ms";
     else
         parameter += "s";
-    this->valueText.RenderText(parameter, this->viewportX * 2, this->viewportY * 0.5 - this->fontSize / 2, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+    this->valueText.RenderText(parameter, this->viewportX * 2, this->viewportY * 0.5 - this->fontSize / 2, 1.0f, this->textColor);
     if (this->ifPause)
-        this->valueText.RenderText("pause", this->viewportX * 5, this->viewportY * 0.5 - this->fontSize / 2, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+        this->valueText.RenderText("pause", this->viewportX * 5, this->viewportY * 0.5 - this->fontSize / 2, 1.0f, this->textColor);
     if (this->ifTrig)
-        this->valueText.RenderText("trigger", this->viewportX * 6, this->viewportY * 0.5 - this->fontSize / 2, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+        this->valueText.RenderText("trigger", this->viewportX * 6, this->viewportY * 0.5 - this->fontSize / 2, 1.0f, this->textColor);
     glDisable(GL_BLEND);
     glViewport(this->viewportX, this->viewportY, this->viewportW, this->viewportH);
     glm::mat4 transform;
     this->dashedShader.Use();
     dashedShader.SetMatrix4fv("transform", transform);
     glBindVertexArray(this->borderVAO);
+    dashedShader.SetVector3f("setColor", this->borderColor);
     this->dashedShader.SetVector3u("type", 0U, 0U, 1U);
     glDrawElements(GL_LINES, 8, GL_UNSIGNED_INT, 0); //边框
     transform = glm::scale(transform, glm::vec3(1.0f, yScale, 1.0f));
@@ -227,12 +240,13 @@ void BackgroundRender::drawBackground(float xStep, int xExponent, float yScale, 
     dashedShader.SetMatrix4fv("transform", transform);
     glDrawElements(GL_LINES, 2, GL_UNSIGNED_INT, (void *)(8 * sizeof(unsigned int))); //0mv线
     glBindVertexArray(this->gridVAO);
-    offset = offset * yScale / yZoom;
-    offset = fmod(offset, 0.2);
+    float offsetMod = offset * yScale / yZoom;
+    offsetMod = fmod(offsetMod, 0.2);
     transform = glm::mat4(1.0f);
     transform = glm::scale(transform, glm::vec3(xZoom, yZoom, 1.0f));
-    transform = glm::translate(transform, glm::vec3(0.0f, -offset * 2, 0.0f));
+    transform = glm::translate(transform, glm::vec3(0.0f, -offsetMod * 2, 0.0f));
     dashedShader.SetMatrix4fv("transform", transform);
+    dashedShader.SetVector3f("setColor", this->gridColor);
     this->dashedShader.SetVector3u("type", 0U, 0U, 0U);
     glDrawElements(GL_LINES, 22, GL_UNSIGNED_INT, (void *)(0 * sizeof(unsigned int))); //横虚线
     this->dashedShader.SetVector3u("type", 0U, 1U, 0U);
@@ -241,4 +255,18 @@ void BackgroundRender::drawBackground(float xStep, int xExponent, float yScale, 
     glDrawElements(GL_LINES, 22, GL_UNSIGNED_INT, (void *)(118 * sizeof(unsigned int))); //竖虚线
     this->dashedShader.SetVector3u("type", 1U, 1U, 0U);
     glDrawElements(GL_LINES, 96, GL_UNSIGNED_INT, (void *)(140 * sizeof(unsigned int))); //横刻度
+    if (this->ifTrig)
+    {
+        dashedShader.SetVector3f("setColor", this->trigLineColor);
+        transform = glm::mat4(1.0f);
+        dashedShader.SetMatrix4fv("transform", transform);
+        this->dashedShader.SetVector3u("type", 1U, 0U, 0U);
+        glDrawElements(GL_LINES, 2, GL_UNSIGNED_INT, (void *)(238 * sizeof(unsigned int))); //竖虚线
+        transform = glm::scale(transform, glm::vec3(1.0f, yScale, 1.0f));
+        transform = glm::translate(transform, glm::vec3(0.0f, -offset * 2, 0.0f));
+        transform = glm::translate(transform, glm::vec3(0.0f, trigLevel / 5000, 0.0f));
+        dashedShader.SetMatrix4fv("transform", transform);
+        this->dashedShader.SetVector3u("type", 0U, 0U, 0U);
+        glDrawElements(GL_LINES, 2, GL_UNSIGNED_INT, (void *)(236 * sizeof(unsigned int))); //横虚线
+    }
 }

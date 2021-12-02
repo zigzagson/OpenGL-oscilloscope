@@ -37,11 +37,12 @@ float viewHeight = scrHeight * 0.92;
 float scaleState = 1;
 glm::vec2 offsetState(-0.5f, 0.0f);
 glm::vec2 offset(0.0f, 0.0f);
+float trigLevel = 0;
+float trigLevelState = 0;
 float timeStep = 1;
 int timeExponent = 0;
 bool wavePause = false;
 bool waveTrig = false;
-bool waveDraw = true;
 
 HANDLE threadHandle;
 unsigned threadCount = 0;
@@ -62,14 +63,16 @@ int main()
     background.setSize(scrWidth, scrHeight, scrWidth * 0.1, scrHeight * 0.06, viewWidth, viewHeight);
     while (!glfwWindowShouldClose(window))
     {
+#if DEBUG
+#else
         threadRestart();
+#endif
         if (!wavePause)
             wave.ResetWaveData(waveFormData, sizeof(waveFormData));
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
-        background.drawBackground(timeStep, timeExponent, scaleState, offsetState.y + offset.y); //画网格
-        if (waveDraw)
-            wave.RenderWave(offsetState + offset, timeStep, scaleState, glm::vec3(1.0f, 1.0f, 0.0f)); //画波形
+        background.drawBackground(timeStep, timeExponent, scaleState, offsetState.y + offset.y, trigLevel + trigLevelState); //画网格
+        wave.RenderWave(offsetState + offset, timeStep, scaleState, glm::vec3(1.0f, 1.0f, 0.0f));                            //画波形
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
@@ -167,6 +170,8 @@ void mouse_press_callback(GLFWwindow *window, int button, int action, int mods)
                 waveTrig = !waveTrig; //右键点击图标开启触发
             else
                 wavePause = !wavePause; //右键点击图标外暂停
+            if (waveTrig)
+                wavePause = false;
             background.ifPause = wavePause;
             background.ifTrig = waveTrig;
         }
@@ -191,11 +196,16 @@ void mouse_cursor_callback(GLFWwindow *window, double xpos, double ypos)
 {
     static float firstX, firstY;
     static bool firstPress = true;
+    static int type;
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE) //左键拖动
     {
         offsetState += offset;
+        if (waveTrig)
+            offsetState.x = -0.5 * timeStep;
+        trigLevelState += trigLevel;
         offset.x = 0;
         offset.y = 0;
+        trigLevel = 0;
         firstPress = true;
         return;
     }
@@ -203,10 +213,20 @@ void mouse_cursor_callback(GLFWwindow *window, double xpos, double ypos)
     {
         firstX = xpos;
         firstY = ypos;
+        if (xpos < scrWidth * 0.8)
+            type = 0;
+        else
+            type = 1;
         firstPress = false;
     }
-    offset.x = (xpos - firstX) / viewWidth * timeStep;
-    offset.y = (ypos - firstY) / viewHeight / scaleState;
+    if (type == 0)
+    {
+        if (waveTrig == 0)
+            offset.x = (xpos - firstX) / viewWidth * timeStep;
+        offset.y = (ypos - firstY) / viewHeight / scaleState;
+    }
+    if (type && waveTrig)
+        trigLevel = -(ypos - firstY) * 10000 / viewHeight / scaleState;
 }
 
 void waveAutoSet()
@@ -232,22 +252,24 @@ void waveAutoSet()
     if (scaleState > 1000.01f)
         scaleState = 1000.0f;
     offsetState.y = (max + min) / 2 / 10000.0f;
+    trigLevelState = (max + min) / 2;
 }
 
 void dataTrig()
 {
     if (waveTrig)
     {
-        float trigLevel = 0;
+        float level = trigLevelState + trigLevel;
+        int preTrigDepth = VIEWADLE_DATA_SIZE * timeStep / 2;
+        //int preTrigDepth = 0;
         int trigNum = 0;
-        waveDraw = true;
-        for (int i = 3000; i < DATA_SIZE - VIEW_DATA_SIZE; i++)
+        for (int i = 3000 + preTrigDepth; i < DATA_SIZE - VIEW_DATA_SIZE; i++)
         {
-            if ((waveData[2 * i + 1] > trigLevel) && (waveData[2 * i - 1] < trigLevel))
+            if ((waveData[2 * i + 1] > level) && (waveData[2 * i - 1] < level))
             {
                 for (int j = 0; j < VIEW_DATA_SIZE; j++)
                 {
-                    waveFormData[2 * j + 1] = waveData[2 * (i + j) + 1] + waveFormData[2 * j + 1];
+                    waveFormData[2 * j + 1] = waveData[2 * (i - preTrigDepth + j) + 1] + waveFormData[2 * j + 1];
                 }
                 i += VIEW_DATA_SIZE;
                 trigNum++;
@@ -255,7 +277,11 @@ void dataTrig()
         }
         if (trigNum == 0)
         {
-            waveDraw = false;
+            for (int i = 0; i < VIEW_DATA_SIZE; i++)
+            {
+                waveFormData[2 * i] = (float)i;
+                waveFormData[2 * i + 1] = waveData[2 * (i + 3000) + 1];
+            }
             return;
         }
         for (int i = 0; i < VIEW_DATA_SIZE; i++)
@@ -324,11 +350,12 @@ UINT Receive_Data(LPVOID lpVoid)
         if (wavePause)
             continue;
         float timeValue = glfwGetTime();
-        for (unsigned i = 0; i < VIEW_DATA_SIZE; i++)
+        for (unsigned i = 0; i < DATA_SIZE; i++)
         {
-            waveFormData[2 * i] = (float)i;
-            waveFormData[2 * i + 1] = 300 * sin((float)i / 50.0f + timeValue) + 200;
+            waveData[2 * i] = (float)i;
+            waveData[2 * i + 1] = 300 * sin((float)i / 50.0f + timeValue) + 200;
         }
+        dataTrig();
         Sleep(500);
     }
     return 0;

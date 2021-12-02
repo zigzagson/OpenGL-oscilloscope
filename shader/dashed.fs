@@ -4,6 +4,7 @@ in vec2 vertPos;
 out vec4 FragColor;
 
 uniform uvec3 type;
+uniform vec3 setColor;
 
 void main()
 {
@@ -30,7 +31,7 @@ void main()
         if(bit!=0U&&bit!=1U&&bit!=49U)
             discard;
     }
-    FragColor = vec4(0.6f, 0.6f, 0.6f, 0.0f);
+    FragColor = vec4(setColor, 0.0f);
     if(type.z==1U)
-        FragColor = vec4(0.9f, 0.9f, 0.9f, 0.9f);
+        FragColor = vec4(setColor, 0.0f);
 }
