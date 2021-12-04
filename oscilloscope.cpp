@@ -24,6 +24,7 @@ void mouse_cursor_callback(GLFWwindow *window, double xpos, double ypos);
 void mouse_press_callback(GLFWwindow *window, int button, int action, int mods);
 void mouse_scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 
+void waveParameter();
 void waveAutoSet();
 void dataTrig();
 UINT Receive_Data(LPVOID lpVoid);
@@ -41,11 +42,16 @@ float scaleState = 1;
 glm::vec2 offsetState(-0.5f, 0.0f);
 glm::vec2 offset(0.0f, 0.0f);
 float trigLevel = 0;
-float trigLevelState = 0;
+float trigLevelState = 100;
 float timeStep = 1;
 int timeExponent = 0;
 bool wavePause = false;
 bool waveTrig = false;
+int autoPeriodNum = 3;
+int autoVoltageNum = 6;
+float scrollSensitivity = 1;
+
+unsigned samplingRate = 50; //单位MHz
 
 HANDLE threadHandle;
 unsigned threadCount = 0;
@@ -59,6 +65,12 @@ glm::vec3 backgroundColor(0.1f, 0.1f, 0.1f);
 glm::vec3 waveColor(1.0f, 1.0f, 0.0f);
 glm::vec4 iconColor(0.8f, 0.8f, 0.8f, 1.0f);
 glm::vec4 iconClickColor(1.0f, 1.0f, 1.0f, 0.0f);
+
+#if DEBUG
+int debugWaveRange = 600;
+int debugWaveOffset = 200;
+float debugWavePeriod = 6;
+#endif
 
 int main()
 {
@@ -114,7 +126,6 @@ void windowInit()
     }
     background.BackgroundRenderInit(scrWidth, scrHeight);
     background.setSize(scrWidth, scrHeight, scrWidth * 0.1, scrHeight * 0.06, viewWidth, viewHeight);
-    background.iconTexture.color = iconColor;
 }
 void configurationInit()
 {
@@ -147,6 +158,10 @@ void configurationInit()
         color["trig"].append(0.3f);
         color["trig"].append(0.1f);
         root["color"] = color;
+        root["rate"] = samplingRate;
+        root["auto"].append(autoVoltageNum);
+        root["auto"].append(autoPeriodNum);
+        root["scroll"] = scrollSensitivity;
         writer->write(root, &ofs);
         ofs.close();
         return;
@@ -160,6 +175,15 @@ void configurationInit()
         system("pause");
         return;
     }
+#if DEBUG
+    debugWaveRange = root["debug"][0].asInt();
+    debugWaveOffset = root["debug"][1].asInt();
+    debugWavePeriod = root["debug"][2].asFloat();
+#endif
+    samplingRate = root["rate"].asUInt();
+    scrollSensitivity = root["scroll"].asFloat();
+    autoVoltageNum = root["auto"][0].asInt();
+    autoPeriodNum = root["auto"][1].asInt();
     Json::Value color = root["color"];
     backgroundColor = glm::vec3(color["background"][0].asFloat(), color["background"][1].asFloat(), color["background"][2].asFloat());
     waveColor = glm::vec3(color["wave"][0].asFloat(), color["wave"][1].asFloat(), color["wave"][2].asFloat());
@@ -170,6 +194,7 @@ void configurationInit()
     background.textColor = glm::vec3(color["text"][0].asFloat(), color["text"][1].asFloat(), color["text"][2].asFloat());
     background.trigLineColor = glm::vec3(color["trig"][0].asFloat(), color["trig"][1].asFloat(), color["trig"][2].asFloat());
     background.iconTexture.color = iconColor;
+    background.samplingRate = samplingRate;
     ifs.close();
 }
 
@@ -187,13 +212,13 @@ void mouse_scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
     glfwGetCursorPos(window, &posX, &posY);
     if (posX < scrWidth * 0.8)
     {
-        scaleState *= pow(10, yoffset / 10);
+        scaleState *= pow(10, scrollSensitivity * yoffset / 10);
         if (scaleState > 1000.01 || scaleState < 0.5)
-            scaleState *= pow(10, -yoffset / 10);
+            scaleState *= pow(10, -scrollSensitivity * yoffset / 10);
     }
     else
     {
-        timeStep *= pow(10, -yoffset / 10);
+        timeStep *= pow(10, -scrollSensitivity * yoffset / 10);
         if (timeStep < 1)
         {
             if (timeExponent > 0)
@@ -202,7 +227,7 @@ void mouse_scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
                 timeStep *= 10;
             }
             else
-                timeStep *= pow(10, yoffset / 10);
+                timeStep *= pow(10, scrollSensitivity * yoffset / 10);
         }
         if (timeStep >= 10)
         {
@@ -212,7 +237,7 @@ void mouse_scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
                 timeStep /= 10;
             }
             else
-                timeStep *= pow(10, yoffset / 10);
+                timeStep *= pow(10, scrollSensitivity * yoffset / 10);
         }
     }
 }
@@ -299,30 +324,92 @@ void mouse_cursor_callback(GLFWwindow *window, double xpos, double ypos)
         trigLevel = -(ypos - firstY) * 10000 / viewHeight / scaleState;
 }
 
-void waveAutoSet()
+void waveParameter()
 {
-    float min, max;
+    float min, max, range, average;
     min = waveFormData[1];
     max = waveFormData[1];
     if (!(min == min && max == max))
-        return;
+    {
+        min = 0;
+        max = 0;
+    }
     for (int i = 1; i < VIEW_DATA_SIZE; i++)
     {
+        average += waveFormData[2 * i + 1];
         if (waveFormData[2 * i + 1] > max)
             max = waveFormData[2 * i + 1];
         if (waveFormData[2 * i + 1] < min)
             min = waveFormData[2 * i + 1];
     }
+    range = max - min;
+    average = average / VIEW_DATA_SIZE;
+    int min_i, max_i;
+    float rise_i, freq_i; //上升时间最小值坐标，最大值坐标
+    for (int i = 3000; i < VIEW_DATA_SIZE; i++)
+    {
+        if ((waveFormData[2 * i - 1] < (0.293 * range + min)) && (waveFormData[2 * i + 1] > (0.293 * range + min)))
+        {
+            min_i = i;
+            for (int j = i; j < VIEW_DATA_SIZE; j++)
+            {
+                if ((waveFormData[2 * j - 1] < (0.707 * range + min)) && (waveFormData[2 * j + 1] > (0.707 * range + min)))
+                {
+                    max_i = j;
+                    break;
+                }
+            }
+            rise_i = (max_i - min_i);
+            for (int j = i; j < VIEW_DATA_SIZE; j++)
+            {
+                if ((waveFormData[2 * j - 1] < (0.293 * range + min)) && (waveFormData[2 * j + 1] > (0.293 * range + min)))
+                {
+                    max_i = j;
+                    if ((max_i - min_i) > rise_i)
+                        break;
+                }
+            }
+            freq_i = (max_i - min_i);
+            break;
+        }
+    }
+    background.waveMin = min;
+    background.waveMax = max;
+    background.waveAverage = average;
+    background.wavePeriod = freq_i / samplingRate * pow(10, timeExponent);
+    background.waveRiseTime = rise_i / samplingRate * pow(10, timeExponent);
+}
+void waveAutoSet()
+{
+    float min = background.waveMin;
+    float max = background.waveMax;
+    float period = background.wavePeriod * samplingRate / pow(10, timeExponent);
     if (max - min == 0)
         scaleState = 1000.0;
     else
-        scaleState = 6000.0f / (max - min);
+        scaleState = autoVoltageNum * 1000.0f / (max - min);
     if (scaleState < 0.5f)
         scaleState = 0.5f;
     if (scaleState > 1000.01f)
         scaleState = 1000.0f;
     offsetState.y = (max + min) / 2 / 10000.0f;
     trigLevelState = (max + min) / 2;
+    timeStep = autoPeriodNum * period / VIEWADLE_DATA_SIZE;
+    if (timeStep == 0)
+        timeStep = 1000;
+    while (timeStep >= 10)
+    {
+        if (timeExponent < 7)
+            timeExponent++;
+        timeStep /= 10;
+    }
+    while (timeStep < 1)
+    {
+        if (timeExponent > 0)
+            timeExponent--;
+        timeStep *= 10;
+    }
+    offsetState.x = -0.5 * timeStep;
 }
 
 void dataTrig()
@@ -370,21 +457,46 @@ void dataTrig()
     }
 }
 
-void dataTrig_no()
+void dataTrig_without_oversampling()
 {
-    int i = 0;
-    float trigLevel = 0;
-    for (i = 3000; i < DATA_SIZE - VIEW_DATA_SIZE; i++)
+    if (waveTrig)
     {
-        if ((waveData[2 * i + 1] > trigLevel) && (waveData[2 * i - 1] < trigLevel))
+        float level = trigLevelState + trigLevel;
+        int preTrigDepth = VIEWADLE_DATA_SIZE * timeStep / 2;
+        //int preTrigDepth = 0;
+        int trigNum = 0;
+        for (int i = 3000 + preTrigDepth; i < DATA_SIZE - VIEW_DATA_SIZE; i++)
         {
-            break;
+            if ((waveData[2 * i + 1] > level) && (waveData[2 * i - 1] < level))
+            {
+                for (int j = 0; j < VIEW_DATA_SIZE; j++)
+                {
+                    waveFormData[2 * j] = (float)j;
+                    waveFormData[2 * j + 1] = waveData[2 * (i - preTrigDepth + j) + 1] /*+ waveFormData[2 * j + 1]*/;
+                }
+                i += VIEW_DATA_SIZE;
+                trigNum++;
+            }
+            if (trigNum == 1)
+                break;
+        }
+        if (trigNum == 0)
+        {
+            for (int i = 0; i < VIEW_DATA_SIZE; i++)
+            {
+                waveFormData[2 * i] = (float)i;
+                waveFormData[2 * i + 1] = waveData[2 * (i + 3000) + 1];
+            }
+            return;
         }
     }
-    for (int j = 0; j < VIEW_DATA_SIZE; j++)
+    else
     {
-        waveFormData[2 * j] = (float)j;
-        waveFormData[2 * j + 1] = waveData[2 * (i + j) + 1];
+        for (int i = 0; i < VIEW_DATA_SIZE; i++)
+        {
+            waveFormData[2 * i] = (float)i;
+            waveFormData[2 * i + 1] = waveData[2 * (i + 3000) + 1];
+        }
     }
 }
 
@@ -420,12 +532,14 @@ UINT Receive_Data(LPVOID lpVoid)
         if (wavePause)
             continue;
         float timeValue = glfwGetTime();
+        float period = debugWavePeriod * samplingRate / pow(10, timeExponent);
         for (unsigned i = 0; i < DATA_SIZE; i++)
         {
             waveData[2 * i] = (float)i;
-            waveData[2 * i + 1] = 300 * sin((float)i / 50.0f + timeValue) + 200;
+            waveData[2 * i + 1] = debugWaveRange / 2 * sin((float)i * 6.2832f / period + timeValue) + debugWaveOffset;
         }
         dataTrig();
+        waveParameter();
         Sleep(500);
     }
     return 0;
@@ -466,9 +580,11 @@ UINT Receive_Data(LPVOID lpVoid)
         for (int i = 0; i < DATA_SIZE; i++)
         {
             waveData[2 * i] = (float)i;
-            waveData[2 * i + 1] = (float)dataBuf[i] * 5000.0f / 2048.0f;
+            waveData[2 * i + 1] = (float)dataBuf[i] * 5000.0f / 2048.0f + 183; //AD采样板偏差纠正
         }
         dataTrig();
+        waveParameter();
+        //dataTrig_without_oversampling();
         threadCount++;
         Sleep(500);
     }

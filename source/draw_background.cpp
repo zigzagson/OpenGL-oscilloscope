@@ -8,11 +8,17 @@ void BackgroundRender::BackgroundRenderInit(float scrWidth, float scrHeight)
     this->iconTexture.Generate("img/uestc_icon.png", GL_RGBA);
     this->iconTexture.color = glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
     this->fontSize = (GLuint)(scrWidth / 240) * 4;
-    this->valueText.Load("fonts/arial.ttf", this->fontSize);
+    this->valueText.Load("fonts/ARLRDBD.TTF", this->fontSize);
     this->borderColor = glm::vec3(0.9f, 0.9f, 0.9f);
     this->gridColor = glm::vec3(0.6f, 0.6f, 0.6f);
     this->trigLineColor = glm::vec3(0.9f, 0.3f, 0.1f);
     this->textColor = glm::vec3(0.9f, 0.9f, 0.9f);
+    this->waveMax = 0;
+    this->waveMin = 0;
+    this->wavePeriod = 0;
+    this->waveAverage = 0;
+    this->waveRiseTime = 0;
+    this->samplingRate = 50;
     BackgroundBorderInit();
     BackgroundGriddingInit();
 }
@@ -122,7 +128,7 @@ void BackgroundRender::setSize(float scrWidth, float scrHeight, float viewportX,
     this->viewportH = viewportH;
     this->valueText.SetProjection(scrWidth, scrHeight);
     this->fontSize = (GLuint)(scrWidth / 240) * 4;
-    this->valueText.Load("fonts/arial.ttf", this->fontSize);
+    this->valueText.Load("fonts/ARLRDBD.TTF", this->fontSize);
     this->iconTexture.SetProjection(scrWidth, scrHeight);
     this->iconTexture.SetPosition(scrWidth * 0.84f, scrHeight - scrWidth * 0.16f, scrWidth * 0.12f, scrWidth * 0.12f);
 }
@@ -154,6 +160,7 @@ void BackgroundRender::drawBackground(float xStep, int xExponent, float yScale, 
         xZoom = xZoom / 10.0;
         xStep = 1;
     }
+    xZoom = xZoom * this->samplingRate / 50;
     int yExponent;
     float yZoom, yStep;
     yZoom = yScale * 2;
@@ -221,7 +228,24 @@ void BackgroundRender::drawBackground(float xStep, int xExponent, float yScale, 
         parameter += "ms";
     else
         parameter += "s";
+    float Vac, Vac1, Vac2;
+    Vac1 = abs(waveMax) / sqrt(2);
+    Vac2 = abs(waveMin) / sqrt(2);
+    if (Vac1 > Vac2)
+        Vac = Vac1;
+    else
+        Vac = Vac2;
     this->valueText.RenderText(parameter, this->viewportX * 2, this->viewportY * 0.5 - this->fontSize / 2, 1.0f, this->textColor);
+    this->valueText.RenderText("Max:" + (std::to_string(waveMax) + "mV"), this->viewportX * 8.1, this->viewportY * 11 - this->fontSize / 2, 1.0f, this->textColor);
+    this->valueText.RenderText("Min:" + (std::to_string(waveMin) + "mV"), this->viewportX * 8.1, this->viewportY * 10 - this->fontSize / 2, 1.0f, this->textColor);
+    this->valueText.RenderText("Average:" + (std::to_string(waveAverage) + "mV"), this->viewportX * 8.1, this->viewportY * 9 - this->fontSize / 2, 1.0f, this->textColor);
+    this->valueText.RenderText("Vrms_AC:" + (std::to_string(Vac) + "mV"), this->viewportX * 8.1, this->viewportY * 8 - this->fontSize / 2, 1.0f, this->textColor);
+    this->valueText.RenderText("RiseTime:" + (std::to_string(waveRiseTime) + "us"), this->viewportX * 8.1, this->viewportY * 7 - this->fontSize / 2, 1.0f, this->textColor);
+    this->valueText.RenderText("Period:" + (std::to_string(wavePeriod) + "us"), this->viewportX * 8.1, this->viewportY * 6 - this->fontSize / 2, 1.0f, this->textColor);
+    this->valueText.RenderText("UESTClimbers:", this->viewportX * 8.3, this->viewportY * 4 - this->fontSize / 2, 1.0f, this->textColor);
+    this->valueText.RenderText("ZBpine", this->viewportX * 8.5, this->viewportY * 3.5 - this->fontSize / 2, 1.0f, this->textColor);
+    this->valueText.RenderText("Zigzagson", this->viewportX * 8.5, this->viewportY * 2.5 - this->fontSize / 2, 1.0f, this->textColor);
+    this->valueText.RenderText("Ji Bei", this->viewportX * 8.5, this->viewportY * 3 - this->fontSize / 2, 1.0f, this->textColor);
     if (this->ifPause)
         this->valueText.RenderText("pause", this->viewportX * 5, this->viewportY * 0.5 - this->fontSize / 2, 1.0f, this->textColor);
     if (this->ifTrig)

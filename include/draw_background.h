@@ -28,6 +28,8 @@ public:
     glm::vec3 gridColor;
     glm::vec3 trigLineColor;
     glm::vec3 textColor;
+    float waveMin, waveMax, wavePeriod, waveAverage, waveRiseTime;
+    float samplingRate;
 
 private:
     void BackgroundBorderInit();

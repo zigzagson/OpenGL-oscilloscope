@@ -1,0 +1,2 @@
+g++ oscilloscope.cpp source/udp_upper.cpp source/draw_background.cpp source/wave_renderer.cpp source/stb_image.cpp source/text_renderer.cpp source/texture.cpp source/shader.cpp -o oscilloscope.exe -g -m64 -Wall -static-libgcc -fexec-charset=GBK -I./include/ -L./lib/ -lglfw3dll -lglad -ljsoncpp ./lib/freetype.lib -lwsock32
+start oscilloscope.exe
