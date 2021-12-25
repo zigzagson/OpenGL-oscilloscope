@@ -56,6 +56,10 @@
         "xlocmes": "cpp",
         "xloctime": "cpp",
         "thread": "cpp",
-        "chrono": "cpp"
+        "chrono": "cpp",
+        "array": "cpp",
+        "deque": "cpp",
+        "iterator": "cpp",
+        "stack": "cpp"
     }
 }

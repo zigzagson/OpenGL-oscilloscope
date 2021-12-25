@@ -27,6 +27,7 @@ void mouse_scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 void waveParameter();
 void waveAutoSet();
 void dataTrig();
+void dataTrig_without_oversampling();
 UINT Receive_Data(LPVOID lpVoid);
 void threadRestart();
 
@@ -45,6 +46,7 @@ float trigLevel = 0;
 float trigLevelState = 100;
 float timeStep = 1;
 int timeExponent = 0;
+bool overSampling = false;
 bool wavePause = false;
 bool waveTrig = false;
 int autoPeriodNum = 3;
@@ -162,6 +164,11 @@ void configurationInit()
         root["auto"].append(autoVoltageNum);
         root["auto"].append(autoPeriodNum);
         root["scroll"] = scrollSensitivity;
+#if DEBUG
+        root["debug"].append(debugWaveRange);
+        root["debug"].append(debugWaveOffset);
+        root["debug"].append(debugWavePeriod);
+#endif
         writer->write(root, &ofs);
         ofs.close();
         return;
@@ -210,13 +217,13 @@ void mouse_scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 {
     double posX, posY;
     glfwGetCursorPos(window, &posX, &posY);
-    if (posX < scrWidth * 0.8)
+    if (posY < scrHeight * 0.9)
     {
         scaleState *= pow(10, scrollSensitivity * yoffset / 10);
         if (scaleState > 1000.01 || scaleState < 0.5)
             scaleState *= pow(10, -scrollSensitivity * yoffset / 10);
     }
-    else
+    if (posX < scrWidth * 0.8)
     {
         timeStep *= pow(10, -scrollSensitivity * yoffset / 10);
         if (timeStep < 1)
@@ -272,6 +279,11 @@ void mouse_press_callback(GLFWwindow *window, int button, int action, int mods)
     }
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
     {
+        if (posX > scrWidth * 0.82 && posX < scrWidth * 0.88 && posY > scrHeight * 0.32 && posY < scrHeight * 0.35)
+        {
+            overSampling = !overSampling;
+            background.ifOverSampling = overSampling;
+        }
         if (Rsquare < scrWidth * 0.06 * scrWidth * 0.06)
         {
             background.iconTexture.color = iconClickColor;
@@ -373,17 +385,22 @@ void waveParameter()
             break;
         }
     }
-    background.waveMin = min;
-    background.waveMax = max;
-    background.waveAverage = average;
-    background.wavePeriod = freq_i / samplingRate * pow(10, timeExponent);
-    background.waveRiseTime = rise_i / samplingRate * pow(10, timeExponent);
+    float Vac, Vac1, Vac2;
+    Vac1 = abs(max) / sqrt(2);
+    Vac2 = abs(min) / sqrt(2);
+    Vac = (Vac1 > Vac2) ? Vac1 : Vac2;
+    background.measuredValue[0].value = max;
+    background.measuredValue[1].value = min;
+    background.measuredValue[2].value = average;
+    background.measuredValue[3].value = Vac;
+    background.measuredValue[4].value = rise_i / samplingRate * pow(10, timeExponent);
+    background.measuredValue[5].value = freq_i / samplingRate * pow(10, timeExponent);
 }
 void waveAutoSet()
 {
-    float min = background.waveMin;
-    float max = background.waveMax;
-    float period = background.wavePeriod * samplingRate / pow(10, timeExponent);
+    float max = background.measuredValue[0].value;
+    float min = background.measuredValue[1].value;
+    float period = background.measuredValue[5].value * samplingRate / pow(10, timeExponent);
     if (max - min == 0)
         scaleState = 1000.0;
     else
@@ -502,6 +519,7 @@ void dataTrig_without_oversampling()
 
 void threadRestart()
 {
+    //子线程不知道为什么总是卡死，此函数判断子线程卡死则杀掉子线程并重启
     static float duration = glfwGetTime();
     static unsigned times = 0;
     if (times != threadCount)
@@ -511,7 +529,7 @@ void threadRestart()
     }
     else
     {
-        if ((glfwGetTime() - duration) > 3.0f)
+        if ((glfwGetTime() - duration) > 3.0f) //卡住3秒则重启
         {
             threadNum++;
             cout << "第" << threadNum << "次重新连接" << endl;
@@ -538,7 +556,10 @@ UINT Receive_Data(LPVOID lpVoid)
             waveData[2 * i] = (float)i;
             waveData[2 * i + 1] = debugWaveRange / 2 * sin((float)i * 6.2832f / period + timeValue) + debugWaveOffset;
         }
-        dataTrig();
+        if (overSampling)
+            dataTrig();
+        else
+            dataTrig_without_oversampling();
         waveParameter();
         Sleep(500);
     }
@@ -582,9 +603,11 @@ UINT Receive_Data(LPVOID lpVoid)
             waveData[2 * i] = (float)i;
             waveData[2 * i + 1] = (float)dataBuf[i] * 5000.0f / 2048.0f + 183; //AD采样板偏差纠正
         }
-        dataTrig();
+        if (overSampling)
+            dataTrig();
+        else
+            dataTrig_without_oversampling();
         waveParameter();
-        //dataTrig_without_oversampling();
         threadCount++;
         Sleep(500);
     }

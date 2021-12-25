@@ -12,6 +12,13 @@
 #include "texture.h"
 #include "text_renderer.h"
 
+typedef struct
+{
+    std::string name;
+    float value;
+    std::string unit;
+} Parameter;
+
 class BackgroundRender
 {
 public:
@@ -24,12 +31,14 @@ public:
     void setSize(float scrWidth, float scrHeight, float viewportX, float viewportY, float viewportW, float viewportH);
     bool ifPause;
     bool ifTrig;
+    bool ifOverSampling;
     glm::vec3 borderColor;
     glm::vec3 gridColor;
     glm::vec3 trigLineColor;
     glm::vec3 textColor;
-    float waveMin, waveMax, wavePeriod, waveAverage, waveRiseTime;
+    Parameter measuredValue[6];
     float samplingRate;
+    std::string valueFontPath;
 
 private:
     void BackgroundBorderInit();

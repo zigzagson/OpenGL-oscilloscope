@@ -8,16 +8,21 @@ void BackgroundRender::BackgroundRenderInit(float scrWidth, float scrHeight)
     this->iconTexture.Generate("img/uestc_icon.png", GL_RGBA);
     this->iconTexture.color = glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
     this->fontSize = (GLuint)(scrWidth / 240) * 4;
-    this->valueText.Load("fonts/ARLRDBD.TTF", this->fontSize);
+    this->valueFontPath = "fonts/ARLRDBD.TTF";
+    this->valueText.Load(valueFontPath, this->fontSize);
+    this->valueText.LoadChinese((wchar_t *)L"攀登计划", "fonts/兰亭序书法字体.ttf", this->fontSize * 2);
+    this->valueText.LoadChinese((wchar_t *)L"周碧松张震籍北", "fonts/simsun.ttc", this->fontSize);
+    this->valueText.LoadChinese((wchar_t *)L"普通过采样", "fonts/simsun.ttc", this->fontSize);
     this->borderColor = glm::vec3(0.9f, 0.9f, 0.9f);
     this->gridColor = glm::vec3(0.6f, 0.6f, 0.6f);
     this->trigLineColor = glm::vec3(0.9f, 0.3f, 0.1f);
     this->textColor = glm::vec3(0.9f, 0.9f, 0.9f);
-    this->waveMax = 0;
-    this->waveMin = 0;
-    this->wavePeriod = 0;
-    this->waveAverage = 0;
-    this->waveRiseTime = 0;
+    this->measuredValue[0] = {"Max", 0, "mV"};
+    this->measuredValue[1] = {"Min", 0, "mV"};
+    this->measuredValue[2] = {"Average", 0, "mV"};
+    this->measuredValue[3] = {"Vrms_AC", 0, "mV"};
+    this->measuredValue[4] = {"RiseTime", 0, "us"};
+    this->measuredValue[5] = {"Period", 0, "us"};
     this->samplingRate = 50;
     BackgroundBorderInit();
     BackgroundGriddingInit();
@@ -128,7 +133,7 @@ void BackgroundRender::setSize(float scrWidth, float scrHeight, float viewportX,
     this->viewportH = viewportH;
     this->valueText.SetProjection(scrWidth, scrHeight);
     this->fontSize = (GLuint)(scrWidth / 240) * 4;
-    this->valueText.Load("fonts/ARLRDBD.TTF", this->fontSize);
+    this->valueText.Load(valueFontPath, this->fontSize);
     this->iconTexture.SetProjection(scrWidth, scrHeight);
     this->iconTexture.SetPosition(scrWidth * 0.84f, scrHeight - scrWidth * 0.16f, scrWidth * 0.12f, scrWidth * 0.12f);
 }
@@ -211,7 +216,7 @@ void BackgroundRender::drawBackground(float xStep, int xExponent, float yScale, 
     for (int i = 0; i < 11; i++) //画刻度值
     {
         int value = (int)(((int)(offset * 10000 / pow(10, yExponent) / yStep) + i - 5) * yStep * 10) * pow(10, yExponent - 1); //因为浮点数精度多了点麻烦
-        int x = this->viewportX - this->fontSize * 1.25;
+        int x = this->viewportX - this->fontSize * 0.5;
         int y = this->viewportY + this->viewportH / 2 + ((float)i - 5.0 - fmod(offset * yScale / yZoom, 0.1) * 10.0) * this->viewportH * 0.1 * yZoom - this->fontSize / 2;
         this->valueText.RenderTextAlignRight(std::to_string(value), x, y, 1.0f, this->textColor);
     }
@@ -228,28 +233,39 @@ void BackgroundRender::drawBackground(float xStep, int xExponent, float yScale, 
         parameter += "ms";
     else
         parameter += "s";
-    float Vac, Vac1, Vac2;
-    Vac1 = abs(waveMax) / sqrt(2);
-    Vac2 = abs(waveMin) / sqrt(2);
-    if (Vac1 > Vac2)
-        Vac = Vac1;
-    else
-        Vac = Vac2;
-    this->valueText.RenderText(parameter, this->viewportX * 2, this->viewportY * 0.5 - this->fontSize / 2, 1.0f, this->textColor);
-    this->valueText.RenderText("Max:" + (std::to_string(waveMax) + "mV"), this->viewportX * 8.1, this->viewportY * 11 - this->fontSize / 2, 1.0f, this->textColor);
-    this->valueText.RenderText("Min:" + (std::to_string(waveMin) + "mV"), this->viewportX * 8.1, this->viewportY * 10 - this->fontSize / 2, 1.0f, this->textColor);
-    this->valueText.RenderText("Average:" + (std::to_string(waveAverage) + "mV"), this->viewportX * 8.1, this->viewportY * 9 - this->fontSize / 2, 1.0f, this->textColor);
-    this->valueText.RenderText("Vrms_AC:" + (std::to_string(Vac) + "mV"), this->viewportX * 8.1, this->viewportY * 8 - this->fontSize / 2, 1.0f, this->textColor);
-    this->valueText.RenderText("RiseTime:" + (std::to_string(waveRiseTime) + "us"), this->viewportX * 8.1, this->viewportY * 7 - this->fontSize / 2, 1.0f, this->textColor);
-    this->valueText.RenderText("Period:" + (std::to_string(wavePeriod) + "us"), this->viewportX * 8.1, this->viewportY * 6 - this->fontSize / 2, 1.0f, this->textColor);
-    this->valueText.RenderText("UESTClimbers:", this->viewportX * 8.3, this->viewportY * 4 - this->fontSize / 2, 1.0f, this->textColor);
-    this->valueText.RenderText("ZBpine", this->viewportX * 8.5, this->viewportY * 3.5 - this->fontSize / 2, 1.0f, this->textColor);
-    this->valueText.RenderText("Zigzagson", this->viewportX * 8.5, this->viewportY * 2.5 - this->fontSize / 2, 1.0f, this->textColor);
-    this->valueText.RenderText("Ji Bei", this->viewportX * 8.5, this->viewportY * 3 - this->fontSize / 2, 1.0f, this->textColor);
+    float paraX = this->viewportX * 1.1 + this->viewportW;
+    float paraY = this->viewportY * 10;
+    float paraD = this->viewportY * 1;
+    for (int i = 0; i < 6; i++)
+    {
+        std::string valueString = std::to_string(this->measuredValue[i].value);
+        valueString.erase(valueString.find(".") + 4); //舍掉小数点后三位
+        this->valueText.RenderText(this->measuredValue[i].name + ":", paraX, paraY - i * paraD, 1.0f, this->textColor);
+        this->valueText.RenderTextAlignRight(valueString, paraX * 1.19, paraY - i * paraD, 1.0f, this->textColor);
+        this->valueText.RenderText(this->measuredValue[i].unit, paraX * 1.2, paraY - i * paraD, 1.0f, this->textColor);
+    }
+    this->valueText.RenderText(parameter, this->viewportX * 2, this->viewportY * 0.5 - this->fontSize / 2, 0.9f, this->textColor);
+    this->valueText.RenderChinese((wchar_t *)L"攀", this->viewportX * 0.1, this->scrHeight * 0.8, 1.0f, this->textColor);
+    this->valueText.RenderChinese((wchar_t *)L"登", this->viewportX * 0.1, this->scrHeight * 0.6, 1.0f, this->textColor);
+    this->valueText.RenderChinese((wchar_t *)L"计", this->viewportX * 0.1, this->scrHeight * 0.4, 1.0f, this->textColor);
+    this->valueText.RenderChinese((wchar_t *)L"划", this->viewportX * 0.1, this->scrHeight * 0.2, 1.0f, this->textColor);
+    this->valueText.RenderText("UESTClimbers:", this->viewportX * 8.3, paraY - 7.2 * paraD, 1.2f, this->textColor);
+    //this->valueText.RenderText("ZBpine", this->viewportX * 8.5, paraY - 8 * paraD, 1.0f, this->textColor);
+    //this->valueText.RenderText("Zigzagson", this->viewportX * 8.5, paraY - 8.6 * paraD, 1.0f, this->textColor);
+    //this->valueText.RenderText("Ji Bei", this->viewportX * 8.5, paraY - 9.2 * paraD, 1.0f, this->textColor);
+    this->valueText.RenderChinese((wchar_t *)L"周碧松", this->viewportX * 8.5, paraY - 8 * paraD, 1.0f, this->textColor);
+    this->valueText.RenderChinese((wchar_t *)L"张震", this->viewportX * 8.5, paraY - 8.6 * paraD, 1.0f, this->textColor);
+    this->valueText.RenderChinese((wchar_t *)L"籍北", this->viewportX * 8.5, paraY - 9.2 * paraD, 1.0f, this->textColor);
     if (this->ifPause)
         this->valueText.RenderText("pause", this->viewportX * 5, this->viewportY * 0.5 - this->fontSize / 2, 1.0f, this->textColor);
     if (this->ifTrig)
+    {
+        if (this->ifOverSampling)
+            this->valueText.RenderChinese((wchar_t *)L"过采样", this->scrWidth * 0.82, this->scrHeight * 0.66, 1.2f, this->textColor);
+        else
+            this->valueText.RenderChinese((wchar_t *)L"普通", this->scrWidth * 0.82, this->scrHeight * 0.66, 1.2f, this->textColor);
         this->valueText.RenderText("trigger", this->viewportX * 6, this->viewportY * 0.5 - this->fontSize / 2, 1.0f, this->textColor);
+    }
     glDisable(GL_BLEND);
     glViewport(this->viewportX, this->viewportY, this->viewportW, this->viewportH);
     glm::mat4 transform;

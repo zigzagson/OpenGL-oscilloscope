@@ -28,6 +28,7 @@ class TextRenderer
 public:
     // Holds a list of pre-compiled Characters
     std::map<GLchar, Character> Characters;
+    std::map<wchar_t, Character> ChineseChar;
     // Shader used for text rendering
     Shader TextShader;
     // Constructor
@@ -37,10 +38,12 @@ public:
     void TextRendererInit(const char *vertexPath, const char *fragmentPath, GLuint width, GLuint height);
     void SetProjection(GLuint width, GLuint height);
     // Pre-compiles a list of characters from the given font
-    void Load(std::string font, GLuint fontSize);
+    void Load(std::string fontPath, GLuint fontSize);
+    void LoadChinese(const wchar_t *text, std::string fontPath, GLuint fontSize);
     // Renders a string of text using the precompiled list of characters
     void RenderText(std::string text, GLfloat x, GLfloat y, GLfloat scale, glm::vec3 color = glm::vec3(1.0f));
     void RenderTextAlignRight(std::string text, GLfloat x, GLfloat y, GLfloat scale, glm::vec3 color = glm::vec3(1.0f));
+    void RenderChinese(const wchar_t *text, GLfloat x, GLfloat y, GLfloat scale, glm::vec3 color = glm::vec3(1.0f));
 
 private:
     // Render state
