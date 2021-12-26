@@ -32,6 +32,7 @@ public:
     bool ifPause;
     bool ifTrig;
     bool ifOverSampling;
+    bool ifTrigAverage;
     glm::vec3 borderColor;
     glm::vec3 gridColor;
     glm::vec3 trigLineColor;

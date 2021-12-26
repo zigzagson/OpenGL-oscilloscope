@@ -35,7 +35,7 @@ void WaveRenderer::ResetWaveData(float *waveFormData, unsigned int size)
 }
 void WaveRenderer::RenderWave(glm::vec2 offset, float xStep, float yScale, glm::vec3 color)
 {
-    float start = -(offset.x + xStep / 2) * this->viewSize;
+    float start = -offset.x * this->viewSize;
     float end = start + this->viewSize * xStep;
     float range = this->dataMax - this->dataMin;
     float min = this->dataMin / yScale + offset.y * range;
