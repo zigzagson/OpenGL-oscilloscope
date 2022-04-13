@@ -24,33 +24,37 @@ void mouse_cursor_callback(GLFWwindow *window, double xpos, double ypos);
 void mouse_press_callback(GLFWwindow *window, int button, int action, int mods);
 void mouse_scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 
-void waveOverSampling();
+void drawWaveForm();
 void waveParameter();
 void waveAutoSet();
-void dataTrig();
-void dataTrig_direct();
+void dataProcessing();
+void waveOverSampling(); //前后overSamplingDigit个点做平均
+void dataTrig();         //平均模式触发
+void dataTrig_direct();  //单次触发
 UINT Receive_Data(LPVOID lpVoid);
 void threadRestart();
 
 #define DATA_SIZE 262144
 #define VIEW_DATA_SIZE 8192
 #define VIEWADLE_DATA_SIZE 600
+#define TIME_DIVS 12
+int dataSize = DATA_SIZE; //实际使用数据量
 float scrWidth = 1200;
 float scrHeight = 750;
 float viewWidth = scrWidth * 0.70;
 float viewHeight = scrHeight * 0.92;
 
-glm::vec2 offset(0.0f, 0.0f);      //偏移，既图像拖动量; 横轴单位是1/VIEWADLE_DATA_SIZE个窗口内的数据量;纵轴单位是mV
-glm::vec2 offsetState(0.0f, 0.0f); //历史偏移状态记录
-float scaleState = 1;              //纵轴缩放，窗口显示10000/scaleState个mV
-float timeStep = 1;                //横轴步长，1/VIEWADLE_DATA_SIZE个窗口内的数据量
+glm::vec2 offset(0.0f, 0.0f);       //偏移，既图像拖动量; 横轴单位是1/TIME_DIVS个窗口内的数据量;纵轴单位是mV
+glm::vec2 offsetState(-0.0f, 0.0f); //历史偏移状态记录
+float scaleState = 1;               //纵轴缩放，窗口显示10000/scaleState个mV
+float timeStep = 1;                 //横轴步长，1/TIME_DIVS个窗口内的时间(us)
 int timeExponent = 0;
-float samplingRate = 50;   //单位MHz
-int overSamplingDigit = 1; //2^过采样位数
+float realTimeSamplingRate = 50;           //实时采样率，单位MHz
+float samplingRate = realTimeSamplingRate; //转换后的采样率，单位MHz（points/us）
+int overSamplingDigit = 1;                 // 过采样。1既没有过采样，16既4位过采样
 float trigLevel = 0;
 float trigLevelState = 100;
-bool trigAverage = false;
-bool overSampling = false;
+bool trigAverage = false; //多次触发图像做平均
 bool wavePause = false;
 bool waveTrig = false;
 int autoPeriodNum = 3;
@@ -62,6 +66,7 @@ unsigned threadCount = 0;
 unsigned threadNum = 0;
 GLFWwindow *window;
 BackgroundRender background;
+WaveRenderer wave;
 float waveFormData[VIEW_DATA_SIZE * 2];
 float waveData[DATA_SIZE];
 
@@ -80,27 +85,30 @@ int main()
 {
     windowInit();
     threadHandle = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)Receive_Data, nullptr, 0, NULL);
-    //OpenGL上下文属于单个线程，在其他线程没有上下文时不可以使用OpenGL函数
+    // OpenGL上下文属于单个线程，在其他线程没有上下文时不可以使用OpenGL函数
     configurationInit();
-    WaveRenderer wave("shader/wave.vs", "shader/wave.fs");
-    wave.SetWaveAttribute(VIEW_DATA_SIZE, VIEWADLE_DATA_SIZE, -5000, 5000);
     while (!glfwWindowShouldClose(window))
     {
-#if DEBUG
-#else
-        threadRestart();
-#endif
-        if (!wavePause)
-            wave.ResetWaveData(waveFormData, sizeof(waveFormData));
         glClearColor(backgroundColor.x, backgroundColor.y, backgroundColor.z, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
-        background.drawBackground(timeStep, timeExponent, scaleState, offsetState.y + offset.y, trigLevel + trigLevelState); //画网格
-        wave.RenderWave(offsetState + offset, timeStep, scaleState, waveColor);                                              //画波形
+        drawWaveForm(); //画图像
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
     glfwTerminate();
     return 0;
+}
+
+void drawWaveForm()
+{
+#if DEBUG
+#else
+    threadRestart();
+#endif
+    if (!wavePause)
+        wave.ResetWaveData(waveFormData, dataSize);
+    background.drawBackground(timeStep, scaleState, offsetState.y + offset.y, trigLevel + trigLevelState); //画网格
+    wave.RenderWave(offsetState + offset, timeStep * samplingRate, scaleState, waveColor);                 //画波形
 }
 
 void windowInit()
@@ -128,6 +136,8 @@ void windowInit()
         std::cout << "Failed to initialize GLAD" << std::endl;
         return;
     }
+    wave.WaveRenderInit("shader/wave.vs", "shader/wave.fs");
+    wave.SetWaveAttribute(TIME_DIVS, -5000, 5000);
     background.BackgroundRenderInit(scrWidth, scrHeight);
     background.setSize(scrWidth, scrHeight, scrWidth * 0.1, scrHeight * 0.06, viewWidth, viewHeight);
 }
@@ -162,7 +172,7 @@ void configurationInit()
         color["trig"].append(0.3f);
         color["trig"].append(0.1f);
         root["color"] = color;
-        root["rate"] = samplingRate;
+        root["rate"] = realTimeSamplingRate;
         root["auto"].append(autoVoltageNum);
         root["auto"].append(autoPeriodNum);
         root["scroll"] = scrollSensitivity;
@@ -189,7 +199,7 @@ void configurationInit()
     debugWaveOffset = root["debug"][1].asInt();
     debugWavePeriod = root["debug"][2].asFloat();
 #endif
-    samplingRate = root["rate"].asFloat();
+    realTimeSamplingRate = root["rate"].asFloat();
     scrollSensitivity = root["scroll"].asFloat();
     autoVoltageNum = root["auto"][0].asInt();
     autoPeriodNum = root["auto"][1].asInt();
@@ -203,7 +213,6 @@ void configurationInit()
     background.textColor = glm::vec3(color["text"][0].asFloat(), color["text"][1].asFloat(), color["text"][2].asFloat());
     background.trigLineColor = glm::vec3(color["trig"][0].asFloat(), color["trig"][1].asFloat(), color["trig"][2].asFloat());
     background.iconTexture.color = iconColor;
-    background.samplingRate = samplingRate / overSamplingDigit;
     ifs.close();
 }
 
@@ -228,26 +237,11 @@ void mouse_scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
     if (posX < scrWidth * 0.8)
     {
         timeStep *= pow(10, -scrollSensitivity * yoffset / 10);
-        if (timeStep < 1)
-        {
-            if (timeExponent > 0)
-            {
-                timeExponent--;
-                timeStep *= 10;
-            }
-            else
-                timeStep *= pow(10, scrollSensitivity * yoffset / 10);
-        }
-        if (timeStep >= 10)
-        {
-            if (timeExponent < 7)
-            {
-                timeExponent++;
-                timeStep /= 10;
-            }
-            else
-                timeStep *= pow(10, scrollSensitivity * yoffset / 10);
-        }
+        if (timeStep < 1 || timeStep >= 1000000)
+            timeStep *= pow(10, scrollSensitivity * yoffset / 10);
+        timeExponent = 0;
+        for (int temp = timeStep; temp >= 10; timeExponent++)
+            temp /= 10;
     }
 }
 void mouse_press_callback(GLFWwindow *window, int button, int action, int mods)
@@ -283,13 +277,11 @@ void mouse_press_callback(GLFWwindow *window, int button, int action, int mods)
     {
         if (posX > scrWidth * 0.82 && posX < scrWidth * 0.88 && posY > scrHeight * 0.32 && posY < scrHeight * 0.35) //是否过采样
         {
-            overSampling = !overSampling;
-            background.ifOverSampling = overSampling;
-            if (overSampling)
+            background.ifOverSampling = !background.ifOverSampling;
+            if (background.ifOverSampling)
                 overSamplingDigit = 16; //过采样4位
             else
                 overSamplingDigit = 1;
-            background.samplingRate = samplingRate / overSamplingDigit;
         }
         if (posX > scrWidth * 0.92 && posX < scrWidth * 0.98 && posY > scrHeight * 0.32 && posY < scrHeight * 0.35) //触发是否平均
         {
@@ -316,7 +308,8 @@ void mouse_cursor_callback(GLFWwindow *window, double xpos, double ypos)
     static float firstX, firstY;
     static bool firstPress = true;
     static int type;
-    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE) //左键拖动
+    //左键拖动
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE) //左键松开后
     {
         offsetState += offset;
         if (waveTrig)
@@ -328,7 +321,7 @@ void mouse_cursor_callback(GLFWwindow *window, double xpos, double ypos)
         firstPress = true;
         return;
     }
-    if (firstPress)
+    if (firstPress) //左键按下时记录初始坐标
     {
         firstX = xpos;
         firstY = ypos;
@@ -341,7 +334,7 @@ void mouse_cursor_callback(GLFWwindow *window, double xpos, double ypos)
     if (type == 0)
     {
         if (waveTrig == 0)
-            offset.x = (xpos - firstX) / viewWidth * timeStep;
+            offset.x = (xpos - firstX) / viewWidth * timeStep * samplingRate;
         offset.y = (ypos - firstY) / viewHeight / scaleState;
     }
     if (type && waveTrig)
@@ -353,50 +346,59 @@ void waveParameter()
     float min, max, range, average;
     min = waveFormData[1];
     max = waveFormData[1];
-    if (!(min == min && max == max))
+    // if (!(min == min && max == max))
+    // {
+    //     min = 0;
+    //     max = 0;
+    // }
+    for (int i = 1; i < dataSize; i++)
     {
-        min = 0;
-        max = 0;
-    }
-    for (int i = 1; i < VIEW_DATA_SIZE; i++)
-    {
-        average += waveFormData[2 * i + 1];
         if (waveFormData[2 * i + 1] > max)
             max = waveFormData[2 * i + 1];
         if (waveFormData[2 * i + 1] < min)
             min = waveFormData[2 * i + 1];
     }
     range = max - min;
-    average = average / VIEW_DATA_SIZE;
-    int min_i, max_i;
-    float rise_i, freq_i; //上升时间最小值坐标，最大值坐标
-    for (int i = 3000; i < VIEW_DATA_SIZE; i++)
+    int min_index, max_index;     //上升时间最小值下标，最大值下标
+    int rise_points, freq_points; //上升时间，一周期 点数
+    for (int i = 1; i < dataSize; i++)
     {
-        if ((waveFormData[2 * i - 1] < (0.293 * range + min)) && (waveFormData[2 * i + 1] > (0.293 * range + min)))
+        if ((waveFormData[2 * i - 1] < (0.1 * range + min)) && (waveFormData[2 * i + 1] > (0.1 * range + min)))
         {
-            min_i = i;
-            for (int j = i; j < VIEW_DATA_SIZE; j++)
+            min_index = i;
+            for (int j = i; j < dataSize; j++)
             {
-                if ((waveFormData[2 * j - 1] < (0.707 * range + min)) && (waveFormData[2 * j + 1] > (0.707 * range + min)))
+                if ((waveFormData[2 * j - 1] < (0.9 * range + min)) && (waveFormData[2 * j + 1] > (0.9 * range + min)))
                 {
-                    max_i = j;
+                    max_index = j;
                     break;
                 }
             }
-            rise_i = (max_i - min_i);
-            for (int j = i; j < VIEW_DATA_SIZE; j++)
-            {
-                if ((waveFormData[2 * j - 1] < (0.293 * range + min)) && (waveFormData[2 * j + 1] > (0.293 * range + min)))
-                {
-                    max_i = j;
-                    if ((max_i - min_i) > rise_i)
-                        break;
-                }
-            }
-            freq_i = (max_i - min_i);
+            rise_points = (max_index - min_index);
             break;
         }
     }
+    for (int i = 1; i < dataSize; i++)
+    {
+        if ((waveFormData[2 * i - 1] < (0.5 * range + min)) && (waveFormData[2 * i + 1] > (0.5 * range + min)))
+        {
+            min_index = i;
+            for (int j = i + 1; j < dataSize; j++)
+            {
+                if ((waveFormData[2 * j - 1] < (0.5 * range + min)) && (waveFormData[2 * j + 1] > (0.5 * range + min)))
+                {
+                    max_index = j;
+                    if ((max_index - min_index) > rise_points)
+                        break;
+                }
+            }
+            freq_points = (max_index - min_index);
+            break;
+        }
+    }
+    for (int i = min_index; i < max_index; i++)
+        average += waveFormData[2 * i + 1];
+    average = average / freq_points;
     float Vac, Vac1, Vac2;
     Vac1 = abs(max) / sqrt(2);
     Vac2 = abs(min) / sqrt(2);
@@ -405,14 +407,14 @@ void waveParameter()
     background.measuredValue[1].value = min;
     background.measuredValue[2].value = average;
     background.measuredValue[3].value = Vac;
-    background.measuredValue[4].value = rise_i * overSamplingDigit / samplingRate * pow(10, timeExponent);
-    background.measuredValue[5].value = freq_i * overSamplingDigit / samplingRate * pow(10, timeExponent);
+    background.measuredValue[4].value = rise_points / samplingRate;
+    background.measuredValue[5].value = freq_points / samplingRate;
 }
 void waveAutoSet()
 {
     float max = background.measuredValue[0].value;
     float min = background.measuredValue[1].value;
-    float period = background.measuredValue[5].value * samplingRate / overSamplingDigit / pow(10, timeExponent);
+    float period = background.measuredValue[5].value;
     if (max - min == 0)
         scaleState = 1000.0;
     else
@@ -423,44 +425,21 @@ void waveAutoSet()
         scaleState = 1000.0f;
     offsetState.y = (max + min) / 2 / 10000.0f;
     trigLevelState = (max + min) / 2;
-    timeStep = autoPeriodNum * period / VIEWADLE_DATA_SIZE;
-    if (overSampling)
-        timeExponent = 0;
+    timeStep = autoPeriodNum * period / TIME_DIVS;
     if (timeStep == 0)
-        timeStep = 10;
-    while (timeStep >= 10)
-    {
-        if (timeExponent < 7)
-            timeExponent++;
-        timeStep /= 10;
-    }
-    while (timeStep < 1)
-    {
-        if (timeExponent > 0)
-            timeExponent--;
-        timeStep *= 10;
-    }
+        timeStep = 100;
+    timeExponent = 0;
+    for (int temp = timeStep; temp >= 10; timeExponent++)
+        temp /= 10;
     offsetState.x = 0;
 }
 
 void waveOverSampling()
 {
-    int dataSize = DATA_SIZE;
-#if DEBUG
-#else
-    if (timeExponent == 1 && (!overSampling)) //timeExponent暂时无法传给FPGA，软件重新采样一下
-    {
-        dataSize /= 10;
-        for (int i = 0; i < dataSize; i++)
-        {
-            waveData[i] = waveData[10 * i];
-        }
-    }
-#endif
-    if (overSampling)
+    if (overSamplingDigit != 1)
     {
         float tmp = 0;
-        for (int i = 0; i < dataSize / overSamplingDigit; i++)
+        for (int i = 0; i < DATA_SIZE / overSamplingDigit; i++)
         {
             for (int j = 0; j < overSamplingDigit; j++)
             {
@@ -470,117 +449,136 @@ void waveOverSampling()
             tmp = 0;
         }
     }
+    dataSize = DATA_SIZE / overSamplingDigit;
+    samplingRate = realTimeSamplingRate / overSamplingDigit;
 }
 void dataTrig()
 {
     static int lastTrigNum = 0;
-    int dataSize = DATA_SIZE;
-#if DEBUG
-#else
-    if (timeExponent == 1 && (!overSampling)) //timeExponent暂时无法传给FPGA，软件重新采样一下
-        dataSize /= 10;
-#endif
-    dataSize /= overSamplingDigit;
-    if (waveTrig)
+    float level = trigLevelState + trigLevel;
+    // int preTrigDepth = TIME_DIVS / 2 * timeStep * samplingRate; //暂时没有用，预触发深度始终在中间
+    int trigNum = 0;
+    int waveForm[VIEW_DATA_SIZE];
+    for (int i = 0; i < VIEW_DATA_SIZE; i++)
     {
-        float level = trigLevelState + trigLevel;
-        int preTrigDepth = VIEWADLE_DATA_SIZE * timeStep / 2;
-        int trigNum = 0;
-        int waveForm[VIEW_DATA_SIZE];
-        for (int i = 0; i < VIEW_DATA_SIZE; i++)
-        {
-            waveForm[i] = waveFormData[2 * i + 1] * lastTrigNum;
-        }
-        for (int i = 3000 + preTrigDepth; i < dataSize - VIEW_DATA_SIZE; i++)
-        {
-            if ((waveData[i] > level) && (waveData[i - 1] < level))
-            {
-                for (int j = 0; j < VIEW_DATA_SIZE; j++)
-                {
-                    waveForm[j] += waveData[i - preTrigDepth + j];
-                }
-                i += VIEW_DATA_SIZE;
-                trigNum++;
-            }
-        }
-        if (trigNum == 0)
-        {
-            for (int i = 0; i < VIEW_DATA_SIZE; i++)
-            {
-                waveFormData[2 * i] = (float)i;
-                waveFormData[2 * i + 1] = waveData[i + 3000];
-            }
-            return;
-        }
-        for (int i = 0; i < VIEW_DATA_SIZE; i++)
-        {
-            waveFormData[2 * i] = (float)i;
-            waveFormData[2 * i + 1] = waveForm[i] / (trigNum + lastTrigNum);
-        }
-        lastTrigNum = trigNum;
+        waveForm[i] = waveFormData[2 * i + 1] * lastTrigNum;
     }
-    else
+    for (int i = VIEW_DATA_SIZE / 2; i < dataSize - VIEW_DATA_SIZE / 2; i++)
+    {
+        if ((waveData[i] > level) && (waveData[i - 1] < level))
+        {
+            for (int j = 0; j < VIEW_DATA_SIZE; j++) //触发点在波形数据中间
+            {
+                waveForm[j] += waveData[i + j - VIEW_DATA_SIZE / 2];
+            }
+            i += VIEW_DATA_SIZE;
+            trigNum++;
+        }
+    }
+    if (trigNum == 0)
     {
         for (int i = 0; i < VIEW_DATA_SIZE; i++)
         {
             waveFormData[2 * i] = (float)i;
-            waveFormData[2 * i + 1] = waveData[i + 3000];
+            waveFormData[2 * i + 1] = waveData[i];
         }
+        return;
     }
+    for (int i = 0; i < VIEW_DATA_SIZE; i++)
+    {
+        waveFormData[2 * i] = (float)i;
+        waveFormData[2 * i + 1] = waveForm[i] / (trigNum + lastTrigNum);
+    }
+    lastTrigNum = trigNum;
 }
 
 void dataTrig_direct()
 {
-    int dataSize = DATA_SIZE;
-#if DEBUG
-#else
-    if (timeExponent == 1 && (!overSampling)) //timeExponent暂时无法传给FPGA，软件重新采样一下
-        dataSize /= 10;
-#endif
-    dataSize /= overSamplingDigit;
-    if (waveTrig)
+    float level = trigLevelState + trigLevel;
+    // int preTrigDepth = TIME_DIVS / 2 * timeStep * samplingRate; //暂时没有用，预触发深度始终在中间
+    int trigNum = 0;
+    for (int i = VIEW_DATA_SIZE / 2; i < dataSize - VIEW_DATA_SIZE / 2; i++)
     {
-        float level = trigLevelState + trigLevel;
-        int preTrigDepth = VIEWADLE_DATA_SIZE * timeStep / 2;
-        int trigNum = 0;
-        for (int i = 3000 + preTrigDepth; i < dataSize - VIEW_DATA_SIZE; i++)
+        if ((waveData[i] > level) && (waveData[i - 1] < level))
         {
-            if ((waveData[i] > level) && (waveData[i - 1] < level))
+            for (int j = 0; j < VIEW_DATA_SIZE; j++) //触发点在波形数据中间
             {
-                for (int j = 0; j < VIEW_DATA_SIZE; j++)
-                {
-                    waveFormData[2 * j] = (float)j;
-                    waveFormData[2 * j + 1] = waveData[i - preTrigDepth + j] /*+ waveFormData[2 * j + 1]*/;
-                }
-                i += VIEW_DATA_SIZE;
-                trigNum++;
+                waveFormData[2 * j] = (float)j;
+                waveFormData[2 * j + 1] = waveData[i + j - VIEW_DATA_SIZE / 2];
             }
-            if (trigNum == 1)
-                break;
+            i += VIEW_DATA_SIZE;
+            trigNum++;
         }
-        if (trigNum == 0)
-        {
-            for (int i = 0; i < VIEW_DATA_SIZE; i++)
-            {
-                waveFormData[2 * i] = (float)i;
-                waveFormData[2 * i + 1] = waveData[i + 3000];
-            }
-            return;
-        }
+        if (trigNum == 1)
+            break;
     }
-    else
+    if (trigNum == 0)
     {
         for (int i = 0; i < VIEW_DATA_SIZE; i++)
         {
             waveFormData[2 * i] = (float)i;
-            waveFormData[2 * i + 1] = waveData[i + 3000];
+            waveFormData[2 * i + 1] = waveData[i];
+        }
+        return;
+    }
+}
+void dataProcessing()
+{
+    waveOverSampling();
+    if (waveTrig)
+    {
+        if (timeExponent >= 1 && overSamplingDigit == 1)
+        {
+            dataSize /= 10;
+            samplingRate /= 10;
+            for (int i = 0; i < dataSize; i++)
+            {
+                waveData[i] = waveData[10 * i];
+            }
+        }
+        if (trigAverage)
+            dataTrig();
+        else
+            dataTrig_direct();
+    }
+    else
+    {
+        if (timeExponent == 0)
+        {
+            for (int i = 0; i < VIEW_DATA_SIZE; i++)
+            {
+                waveFormData[2 * i] = (float)i;
+                waveFormData[2 * i + 1] = waveData[i];
+            }
+        }
+        else if (timeExponent == 1)
+        {
+            dataSize /= 10;
+            samplingRate /= 10;
+            for (int i = 0; i < VIEW_DATA_SIZE && i < dataSize; i++)
+            {
+                waveFormData[2 * i] = (float)i;
+                waveFormData[2 * i + 1] = waveData[10 * i];
+            }
+        }
+        else
+        {
+            dataSize /= 100;
+            samplingRate /= 100;
+            for (int i = 0; i < VIEW_DATA_SIZE && i < dataSize; i++)
+            {
+                waveFormData[2 * i] = (float)i;
+                waveFormData[2 * i + 1] = waveData[100 * i];
+            }
         }
     }
+    dataSize = (dataSize < VIEW_DATA_SIZE) ? dataSize : VIEW_DATA_SIZE;
+    waveParameter();
 }
 
 void threadRestart()
 {
-    //子线程不知道为什么总是卡死，此函数判断子线程卡死则杀掉子线程并重启
+    //子线程不知道为什么总是卡死，此函数判断子线程是否卡死，若是则杀掉子线程并重启
     static float duration = glfwGetTime();
     static unsigned times = 0;
     if (times != threadCount)
@@ -611,17 +609,12 @@ UINT Receive_Data(LPVOID lpVoid)
         if (wavePause)
             continue;
         float timeValue = glfwGetTime();
-        float period = debugWavePeriod * samplingRate / pow(10, timeExponent);
+        float period = debugWavePeriod * realTimeSamplingRate;
         for (unsigned i = 0; i < DATA_SIZE; i++)
         {
             waveData[i] = debugWaveRange / 2 * sin((float)i * 6.2832f / period + timeValue) + debugWaveOffset;
         }
-        waveOverSampling();
-        if (trigAverage)
-            dataTrig();
-        else
-            dataTrig_direct();
-        waveParameter();
+        dataProcessing();
         Sleep(500);
     }
     return 0;
@@ -661,14 +654,9 @@ UINT Receive_Data(LPVOID lpVoid)
         }
         for (int i = 0; i < DATA_SIZE; i++)
         {
-            waveData[i] = (float)dataBuf[i] * 5000.0f / 2048.0f + 183; //AD采样板偏差纠正
+            waveData[i] = (float)dataBuf[i] * 5000.0f / 2048.0f + 183; // AD采样板偏差纠正
         }
-        waveOverSampling();
-        if (trigAverage)
-            dataTrig();
-        else
-            dataTrig_direct();
-        waveParameter();
+        dataProcessing();
         threadCount++;
         Sleep(500);
     }

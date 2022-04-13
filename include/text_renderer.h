@@ -40,6 +40,7 @@ public:
     // Pre-compiles a list of characters from the given font
     void Load(std::string fontPath, GLuint fontSize);
     void LoadChinese(const wchar_t *text, std::string fontPath, GLuint fontSize);
+    void ClearChinese();
     // Renders a string of text using the precompiled list of characters
     void RenderText(std::string text, GLfloat x, GLfloat y, GLfloat scale, glm::vec3 color = glm::vec3(1.0f));
     void RenderTextAlignRight(std::string text, GLfloat x, GLfloat y, GLfloat scale, glm::vec3 color = glm::vec3(1.0f));

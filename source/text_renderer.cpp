@@ -169,6 +169,10 @@ void TextRenderer::LoadChinese(const wchar_t *text, std::string fontPath, GLuint
     FT_Done_Face(face);
     FT_Done_FreeType(ft);
 }
+void TextRenderer::ClearChinese()
+{
+    this->ChineseChar.clear();
+}
 
 void TextRenderer::RenderText(std::string text, GLfloat x, GLfloat y, GLfloat scale, glm::vec3 color)
 {

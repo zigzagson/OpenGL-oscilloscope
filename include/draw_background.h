@@ -27,7 +27,7 @@ public:
     Texture2D iconTexture;
     BackgroundRender() {}
     void BackgroundRenderInit(float scrWidth, float scrHeight);
-    void drawBackground(float xStep, int xExponent, float yScale, float offset, float trigLevel);
+    void drawBackground(float xStep, float yScale, float offset, float trigLevel);
     void setSize(float scrWidth, float scrHeight, float viewportX, float viewportY, float viewportW, float viewportH);
     bool ifPause;
     bool ifTrig;
@@ -38,7 +38,6 @@ public:
     glm::vec3 trigLineColor;
     glm::vec3 textColor;
     Parameter measuredValue[6];
-    float samplingRate;
     std::string valueFontPath;
 
 private:

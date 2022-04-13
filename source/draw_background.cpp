@@ -11,8 +11,8 @@ void BackgroundRender::BackgroundRenderInit(float scrWidth, float scrHeight)
     this->valueFontPath = "fonts/ARLRDBD.TTF";
     this->valueText.Load(valueFontPath, this->fontSize);
     this->valueText.LoadChinese((wchar_t *)L"攀登计划", "fonts/兰亭序书法字体.ttf", this->fontSize * 2);
-    this->valueText.LoadChinese((wchar_t *)L"周碧松张震籍北", "fonts/simsun.ttc", this->fontSize);
-    this->valueText.LoadChinese((wchar_t *)L"普通平均非过采样", "fonts/simsun.ttc", this->fontSize);
+    this->valueText.LoadChinese((wchar_t *)L"周碧松张震籍北", "fonts/FZKTK.TTF", this->fontSize);
+    this->valueText.LoadChinese((wchar_t *)L"普通平均过采样", "fonts/simsun.ttc", this->fontSize);
     this->borderColor = glm::vec3(0.9f, 0.9f, 0.9f);
     this->gridColor = glm::vec3(0.6f, 0.6f, 0.6f);
     this->trigLineColor = glm::vec3(0.9f, 0.3f, 0.1f);
@@ -23,7 +23,6 @@ void BackgroundRender::BackgroundRenderInit(float scrWidth, float scrHeight)
     this->measuredValue[3] = {"Vrms_AC", 0, "mV"};
     this->measuredValue[4] = {"RiseTime", 0, "us"};
     this->measuredValue[5] = {"Period", 0, "us"};
-    this->samplingRate = 50;
     BackgroundBorderInit();
     BackgroundGriddingInit();
 }
@@ -134,24 +133,18 @@ void BackgroundRender::setSize(float scrWidth, float scrHeight, float viewportX,
     this->valueText.SetProjection(scrWidth, scrHeight);
     this->fontSize = (GLuint)(scrWidth / 240) * 4;
     this->valueText.Load(valueFontPath, this->fontSize);
+    this->valueText.ClearChinese();
+    this->valueText.LoadChinese((wchar_t *)L"攀登计划", "fonts/兰亭序书法字体.ttf", this->fontSize * 2);
+    this->valueText.LoadChinese((wchar_t *)L"周碧松张震籍北", "fonts/FZKTK.TTF", this->fontSize);
+    this->valueText.LoadChinese((wchar_t *)L"普通平均过采样", "fonts/simsun.ttc", this->fontSize);
     this->iconTexture.SetProjection(scrWidth, scrHeight);
     this->iconTexture.SetPosition(scrWidth * 0.84f, scrHeight - scrWidth * 0.16f, scrWidth * 0.12f, scrWidth * 0.12f);
 }
-void BackgroundRender::drawBackground(float xStep, int xExponent, float yScale, float offset, float trigLevel)
+void BackgroundRender::drawBackground(float xStep, float yScale, float offset, float trigLevel)
 {
-    xStep = xStep * 50 / this->samplingRate;
-    while (xStep >= 10)
-    {
-        if (xExponent < 7)
-            xExponent++;
+    int xExponent = 0;
+    for (xExponent = 0; xStep >= 10; xExponent++)
         xStep /= 10;
-    }
-    while (xStep < 1)
-    {
-        if (xExponent > 0)
-            xExponent--;
-        xStep *= 10;
-    }
     float xZoom = 10 / xStep;
     if (xZoom >= 1.0 && xZoom < 2.0)
     {
@@ -262,9 +255,9 @@ void BackgroundRender::drawBackground(float xStep, int xExponent, float yScale, 
     this->valueText.RenderChinese((wchar_t *)L"计", this->viewportX * 0.1, this->scrHeight * 0.7, 1.0f, this->textColor);
     this->valueText.RenderChinese((wchar_t *)L"划", this->viewportX * 0.1, this->scrHeight * 0.6, 1.0f, this->textColor);
     this->valueText.RenderText("UESTClimbers:", this->viewportX * 8.3, paraY - 7.2 * paraD, 1.2f, this->textColor);
-    //this->valueText.RenderText("ZBpine", this->viewportX * 8.5, paraY - 8 * paraD, 1.0f, this->textColor);
-    //this->valueText.RenderText("Zigzagson", this->viewportX * 8.5, paraY - 8.6 * paraD, 1.0f, this->textColor);
-    //this->valueText.RenderText("Ji Bei", this->viewportX * 8.5, paraY - 9.2 * paraD, 1.0f, this->textColor);
+    // this->valueText.RenderText("ZBpine", this->viewportX * 8.5, paraY - 8 * paraD, 1.0f, this->textColor);
+    // this->valueText.RenderText("Zigzagson", this->viewportX * 8.5, paraY - 8.6 * paraD, 1.0f, this->textColor);
+    // this->valueText.RenderText("Ji Bei", this->viewportX * 8.5, paraY - 9.2 * paraD, 1.0f, this->textColor);
     this->valueText.RenderChinese((wchar_t *)L"周碧松", this->viewportX * 8.5, paraY - 8 * paraD, 1.0f, this->textColor);
     this->valueText.RenderChinese((wchar_t *)L"张震", this->viewportX * 8.5, paraY - 8.6 * paraD, 1.0f, this->textColor);
     this->valueText.RenderChinese((wchar_t *)L"籍北", this->viewportX * 8.5, paraY - 9.2 * paraD, 1.0f, this->textColor);
@@ -281,7 +274,7 @@ void BackgroundRender::drawBackground(float xStep, int xExponent, float yScale, 
     if (this->ifOverSampling)
         this->valueText.RenderChinese((wchar_t *)L"过采样", this->scrWidth * 0.82, this->scrHeight * 0.66, 1.2f, this->textColor);
     else
-        this->valueText.RenderChinese((wchar_t *)L"非过采样", this->scrWidth * 0.82, this->scrHeight * 0.66, 1.2f, this->textColor);
+        this->valueText.RenderChinese((wchar_t *)L"普通", this->scrWidth * 0.82, this->scrHeight * 0.66, 1.2f, this->textColor);
     glDisable(GL_BLEND);
     glViewport(this->viewportX, this->viewportY, this->viewportW, this->viewportH);
     glm::mat4 transform;
@@ -294,7 +287,7 @@ void BackgroundRender::drawBackground(float xStep, int xExponent, float yScale, 
     transform = glm::scale(transform, glm::vec3(1.0f, yScale, 1.0f));
     transform = glm::translate(transform, glm::vec3(0.0f, -offset * 2, 0.0f));
     dashedShader.SetMatrix4fv("transform", transform);
-    glDrawElements(GL_LINES, 2, GL_UNSIGNED_INT, (void *)(8 * sizeof(unsigned int))); //0mv线
+    glDrawElements(GL_LINES, 2, GL_UNSIGNED_INT, (void *)(8 * sizeof(unsigned int))); // 0mv线
     glBindVertexArray(this->gridVAO);
     float offsetMod = offset * yScale / yZoom;
     offsetMod = fmod(offsetMod, 0.2);

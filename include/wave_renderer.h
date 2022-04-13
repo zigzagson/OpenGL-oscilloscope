@@ -12,16 +12,17 @@ class WaveRenderer
 {
 public:
     Shader WaveShader;
-    WaveRenderer(Shader shader);
+    WaveRenderer() {}
     WaveRenderer(const char *vertexPath, const char *fragmentPath);
-    void SetWaveAttribute(GLuint dataSize, GLuint viewSize, float dataMin, float dataMax);
+    void WaveRenderInit(const char *vertexPath, const char *fragmentPath);
+    void SetWaveAttribute(GLuint viewSize, float dataMin, float dataMax);
     void ResetWaveData(float *waveFormData, unsigned int size);
     void RenderWave(glm::vec2 offset, float xStep, float yScale, glm::vec3 color);
 
 private:
     // Render state
     GLuint VAO, VBO;
-    GLuint dataSize, viewSize;
+    GLuint dataSize, viewSize; //横轴分viewSize格
     float dataMin, dataMax;
 };
 
