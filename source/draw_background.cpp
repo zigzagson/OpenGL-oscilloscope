@@ -6,6 +6,8 @@ void BackgroundRender::BackgroundRenderInit(float scrWidth, float scrHeight)
     this->valueText.TextRendererInit("shader/text.vs", "shader/text.fs", scrWidth, scrHeight);
     this->iconTexture.TextureInit("shader/texture.vs", "shader/texture.fs");
     this->iconTexture.Generate("img/uestc_icon.png", GL_RGBA);
+    this->volBox.InputBoxInit();
+    this->timeBox.InputBoxInit();
     this->iconTexture.color = glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
     this->fontSize = (GLuint)(scrWidth / 240) * 4;
     this->valueFontPath = "fonts/ARLRDBD.TTF";
@@ -139,6 +141,8 @@ void BackgroundRender::setSize(float scrWidth, float scrHeight, float viewportX,
     this->valueText.LoadChinese((wchar_t *)L"普通平均过采样", "fonts/simsun.ttc", this->fontSize);
     this->iconTexture.SetProjection(scrWidth, scrHeight);
     this->iconTexture.SetPosition(scrWidth * 0.84f, scrHeight - scrWidth * 0.16f, scrWidth * 0.12f, scrWidth * 0.12f);
+    this->volBox.setPosition(scrWidth, scrHeight, viewportX * 1.886, viewportY * 0.42 - this->fontSize / 2, this->fontSize * 2.4, this->fontSize);
+    this->timeBox.setPosition(scrWidth, scrHeight, viewportX * 3.94, viewportY * 0.42 - this->fontSize / 2, this->fontSize * 1.8, this->fontSize);
 }
 void BackgroundRender::drawBackground(float xStep, float yScale, float offset, float trigLevel)
 {
@@ -169,6 +173,11 @@ void BackgroundRender::drawBackground(float xStep, float yScale, float offset, f
     else
     {
         xZoom = xZoom / 10.0;
+        xStep = 1;
+    }
+    if ((xExponent == 2 || xExponent == 5) && xStep == 10)
+    {
+        xExponent++;
         xStep = 1;
     }
     int yExponent;
@@ -220,26 +229,42 @@ void BackgroundRender::drawBackground(float xStep, float yScale, float offset, f
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     for (int i = 0; i < 11; i++) //画刻度值
     {
-        int value = (int)(((int)(offset * 10000 / pow(10, yExponent) / yStep) + i - 5) * yStep * 10) * pow(10, yExponent - 1); //因为浮点数精度多了点麻烦
+        int value = (int)(((int)(offset * 10000 / pow(10, yExponent) / yStep) + i - 5) * yStep * 10) * pow(10, yExponent - 1); //因为浮点数精度问题所以这么麻烦
         int x = this->viewportX - this->fontSize * 0.5;
         int y = this->viewportY + this->viewportH / 2 + ((float)i - 5.0 - fmod(offset * yScale / yZoom, 0.1) * 10.0) * this->viewportH * 0.1 * yZoom - this->fontSize / 2;
         this->valueText.RenderTextAlignRight(std::to_string(value), x, y, 1.0f, this->textColor);
     }
-    std::string parameter = "TIME/DIV: ";
-    if ((xExponent == 2 || xExponent == 5) && xStep == 10)
-    {
-        xExponent++;
-        xStep = 1;
-    }
-    parameter += std::to_string((int)(xStep * pow(10, xExponent % 3)));
+    std::string Vpara = "VOL/DIV: ";
+    Vpara += std::to_string((int)(yStep * pow(10, yExponent)));
+    Vpara += " mv";
+    std::string Tpara = "TIME/DIV: ";
+    Tpara += std::to_string((int)(xStep * pow(10, xExponent % 3)));
     if (xExponent < 3)
-        parameter += "us";
+        Tpara += " us";
     else if (xExponent >= 3 && xExponent < 6)
-        parameter += "ms";
+        Tpara += " ms";
     else
-        parameter += "s";
+        Tpara += " s";
+    this->valueText.RenderText(Vpara, this->viewportX * 1.2, this->viewportY * 0.5 - this->fontSize / 2, 0.9f, this->textColor);
+    this->valueText.RenderText(Tpara, this->viewportX * 3.2, this->viewportY * 0.5 - this->fontSize / 2, 0.9f, this->textColor);
+    if (this->volBox.ifInputBoxShow == true)
+    {
+        this->volBox.RenderInputBox();
+        std::string value = this->volBox.valueString;
+        if (value.length() >= 4)
+            value = value.substr(value.length() - 4);
+        this->valueText.RenderText(value, this->viewportX * 1.916, this->viewportY * 0.5 - this->fontSize / 2, 0.9f, this->textColor);
+    }
+    if (this->timeBox.ifInputBoxShow == true)
+    {
+        this->timeBox.RenderInputBox();
+        std::string value = this->timeBox.valueString;
+        if (value.length() >= 3)
+            value = value.substr(value.length() - 3);
+        this->valueText.RenderText(value, this->viewportX * 3.96, this->viewportY * 0.5 - this->fontSize / 2, 0.9f, this->textColor);
+    }
     float paraX = this->viewportX * 1.1 + this->viewportW;
-    float paraY = this->viewportY * 10;
+    float paraY = this->viewportY * 9;
     float paraD = this->viewportY * 1;
     for (int i = 0; i < 6; i++)
     {
@@ -249,32 +274,31 @@ void BackgroundRender::drawBackground(float xStep, float yScale, float offset, f
         this->valueText.RenderTextAlignRight(valueString, paraX * 1.195, paraY - i * paraD, 1.0f, this->textColor);
         this->valueText.RenderText(this->measuredValue[i].unit, paraX * 1.2, paraY - i * paraD, 1.0f, this->textColor);
     }
-    this->valueText.RenderText(parameter, this->viewportX * 2, this->viewportY * 0.5 - this->fontSize / 2, 0.9f, this->textColor);
     this->valueText.RenderChinese((wchar_t *)L"攀", this->viewportX * 0.1, this->scrHeight * 0.9, 1.0f, this->textColor);
     this->valueText.RenderChinese((wchar_t *)L"登", this->viewportX * 0.1, this->scrHeight * 0.8, 1.0f, this->textColor);
     this->valueText.RenderChinese((wchar_t *)L"计", this->viewportX * 0.1, this->scrHeight * 0.7, 1.0f, this->textColor);
     this->valueText.RenderChinese((wchar_t *)L"划", this->viewportX * 0.1, this->scrHeight * 0.6, 1.0f, this->textColor);
-    this->valueText.RenderText("UESTClimbers:", this->viewportX * 8.3, paraY - 7.2 * paraD, 1.2f, this->textColor);
+    this->valueText.RenderText("UESTClimbers:", this->viewportX * 8.3, paraY - 6.7 * paraD, 1.2f, this->textColor);
     // this->valueText.RenderText("ZBpine", this->viewportX * 8.5, paraY - 8 * paraD, 1.0f, this->textColor);
     // this->valueText.RenderText("Zigzagson", this->viewportX * 8.5, paraY - 8.6 * paraD, 1.0f, this->textColor);
     // this->valueText.RenderText("Ji Bei", this->viewportX * 8.5, paraY - 9.2 * paraD, 1.0f, this->textColor);
-    this->valueText.RenderChinese((wchar_t *)L"周碧松", this->viewportX * 8.5, paraY - 8 * paraD, 1.0f, this->textColor);
-    this->valueText.RenderChinese((wchar_t *)L"张震", this->viewportX * 8.5, paraY - 8.6 * paraD, 1.0f, this->textColor);
-    this->valueText.RenderChinese((wchar_t *)L"籍北", this->viewportX * 8.5, paraY - 9.2 * paraD, 1.0f, this->textColor);
+    this->valueText.RenderChinese((wchar_t *)L"周碧松", this->viewportX * 8.5, paraY - 7.5 * paraD, 1.0f, this->textColor);
+    this->valueText.RenderChinese((wchar_t *)L"张震", this->viewportX * 8.5, paraY - 8.1 * paraD, 1.0f, this->textColor);
+    this->valueText.RenderChinese((wchar_t *)L"籍北", this->viewportX * 8.5, paraY - 8.7 * paraD, 1.0f, this->textColor);
     if (this->ifPause)
         this->valueText.RenderText("pause", this->viewportX * 5, this->viewportY * 0.5 - this->fontSize / 2, 1.0f, this->textColor);
+    if (this->ifOverSampling)
+        this->valueText.RenderChinese((wchar_t *)L"过采样", this->scrWidth * 0.82, this->scrHeight * 0.66, 1.2f, this->textColor);
+    else
+        this->valueText.RenderChinese((wchar_t *)L"过采样", this->scrWidth * 0.82, this->scrHeight * 0.66, 1.2f, glm::vec3(0.6f, 0.6f, 0.6f));
     if (this->ifTrig)
     {
         if (this->ifTrigAverage)
             this->valueText.RenderChinese((wchar_t *)L"平均", this->scrWidth * 0.92, this->scrHeight * 0.66, 1.2f, this->textColor);
         else
-            this->valueText.RenderChinese((wchar_t *)L"普通", this->scrWidth * 0.92, this->scrHeight * 0.66, 1.2f, this->textColor);
+            this->valueText.RenderChinese((wchar_t *)L"平均", this->scrWidth * 0.92, this->scrHeight * 0.66, 1.2f, glm::vec3(0.6f, 0.6f, 0.6f));
         this->valueText.RenderText("trigger", this->viewportX * 6, this->viewportY * 0.5 - this->fontSize / 2, 1.0f, this->textColor);
     }
-    if (this->ifOverSampling)
-        this->valueText.RenderChinese((wchar_t *)L"过采样", this->scrWidth * 0.82, this->scrHeight * 0.66, 1.2f, this->textColor);
-    else
-        this->valueText.RenderChinese((wchar_t *)L"普通", this->scrWidth * 0.82, this->scrHeight * 0.66, 1.2f, this->textColor);
     glDisable(GL_BLEND);
     glViewport(this->viewportX, this->viewportY, this->viewportW, this->viewportH);
     glm::mat4 transform;

@@ -7,13 +7,7 @@
             "args": [
                 "${file}",
                 "source/*.cpp",
-                //"source/udp_upper.cpp",
-                //"source/draw_background.cpp",
-                //"source/wave_renderer.cpp",
-                //"source/stb_image.cpp",
-                //"source/text_renderer.cpp",
-                //"source/texture.cpp",
-                //"source/shader.cpp",
+                "img/uestc.res",
                 "-o", // 指定输出文件名，不加该参数则默认输出a.exe，Linux下默认a.out
                 "${fileDirname}/${fileBasenameNoExtension}.exe",
                 "-g", // 生成和调试有关的信息

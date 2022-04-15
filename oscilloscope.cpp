@@ -23,6 +23,7 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void mouse_cursor_callback(GLFWwindow *window, double xpos, double ypos);
 void mouse_press_callback(GLFWwindow *window, int button, int action, int mods);
 void mouse_scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
+void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods);
 
 void drawWaveForm();
 void waveParameter();
@@ -130,6 +131,7 @@ void windowInit()
     glfwSetCursorPosCallback(window, mouse_cursor_callback);
     glfwSetMouseButtonCallback(window, mouse_press_callback);
     glfwSetScrollCallback(window, mouse_scroll_callback);
+    glfwSetKeyCallback(window, key_callback);
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
     {
@@ -293,6 +295,21 @@ void mouse_press_callback(GLFWwindow *window, int button, int action, int mods)
             background.iconTexture.color = iconClickColor;
             waveAutoSet(); //左键点图标autoset
         }
+        if (posX > scrWidth * 0.18 && posX < scrWidth * 0.26 && posY > scrHeight * 0.95 && posY < scrHeight * 0.99) //电压参数输入
+        {
+            background.volBox.ifInputBoxShow = true;
+            background.timeBox.exitInputBox();
+        }
+        else if (posX > scrWidth * 0.38 && posX < scrWidth * 0.44 && posY > scrHeight * 0.95 && posY < scrHeight * 0.99) //时基参数输入
+        {
+            background.timeBox.ifInputBoxShow = true;
+            background.volBox.exitInputBox();
+        }
+        else
+        {
+            background.volBox.exitInputBox();
+            background.timeBox.exitInputBox();
+        }
     }
     if (button == GLFW_MOUSE_BUTTON_MIDDLE && action == GLFW_PRESS)
     {
@@ -339,6 +356,48 @@ void mouse_cursor_callback(GLFWwindow *window, double xpos, double ypos)
     }
     if (type && waveTrig)
         trigLevel = -(ypos - firstY) * 10000 / viewHeight / scaleState;
+}
+void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
+{
+    if (action == GLFW_RELEASE)
+    {
+        if (key == GLFW_KEY_ESCAPE)
+        {
+            background.volBox.exitInputBox();
+            background.timeBox.exitInputBox();
+        }
+        if (background.volBox.ifInputBoxShow)
+        {
+            if (key == GLFW_KEY_ENTER)
+            {
+                scaleState = 1000.0f / background.volBox.getInputValue();
+                background.volBox.exitInputBox();
+                if (scaleState > 1000.0)
+                    scaleState = 1000.0f;
+                if (scaleState < 0.5)
+                    scaleState = 0.5;
+            }
+            else if (key >= GLFW_KEY_0 && key <= GLFW_KEY_9)
+            {
+                background.volBox.TypeInCharacter(key);
+            }
+        }
+        if (background.timeBox.ifInputBoxShow)
+        {
+            if (key == GLFW_KEY_ENTER)
+            {
+                timeStep = background.timeBox.getInputValue();
+                background.timeBox.exitInputBox();
+                timeExponent = 0;
+                for (int temp = timeStep; temp >= 10; timeExponent++)
+                    temp /= 10;
+            }
+            else if (key >= GLFW_KEY_0 && key <= GLFW_KEY_9)
+            {
+                background.timeBox.TypeInCharacter(key);
+            }
+        }
+    }
 }
 
 void waveParameter()

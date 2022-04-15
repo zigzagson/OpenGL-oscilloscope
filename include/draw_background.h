@@ -11,6 +11,7 @@
 #include "shader.h"
 #include "texture.h"
 #include "text_renderer.h"
+#include "input_box.h"
 
 typedef struct
 {
@@ -25,6 +26,7 @@ public:
     Shader dashedShader;
     TextRenderer valueText;
     Texture2D iconTexture;
+    InputBox volBox, timeBox;
     BackgroundRender() {}
     void BackgroundRenderInit(float scrWidth, float scrHeight);
     void drawBackground(float xStep, float yScale, float offset, float trigLevel);
