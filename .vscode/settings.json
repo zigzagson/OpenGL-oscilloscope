@@ -60,6 +60,7 @@
         "array": "cpp",
         "deque": "cpp",
         "iterator": "cpp",
-        "stack": "cpp"
+        "stack": "cpp",
+        "random": "cpp"
     }
 }

@@ -7,13 +7,16 @@
 
 #include "udp_upper.h"
 #include "wave_renderer.h"
+#include "three_dim_wave_renderer.h"
 #include "draw_background.h"
 #include <iostream>
 #include <fstream>
 #include <windows.h>
+#include <chrono>
 #include <cmath>
+#include <random>
 
-#define DEBUG 1
+#define DEBUG 0
 
 using namespace std;
 
@@ -29,15 +32,16 @@ void drawWaveForm();
 void waveParameter();
 void waveAutoSet();
 void dataProcessing();
-void waveOverSampling(); //前后overSamplingDigit个点做平均
-void dataTrig();         //平均模式触发
-void dataTrig_direct();  //单次触发
+void waveOverSampling();       //前后overSamplingDigit个点做平均
+void dataTrig();               //平均模式触发
+void dataTrig_direct();        //单次触发
+void threeDimWavaDataMapper(); //三维波形数据映射
 UINT Receive_Data(LPVOID lpVoid);
 void threadRestart();
 
 #define DATA_SIZE 262144
 #define VIEW_DATA_SIZE 8192
-#define VIEWADLE_DATA_SIZE 600
+//#define VIEWADLE_DATA_SIZE 600
 #define TIME_DIVS 12
 int dataSize = DATA_SIZE; //实际使用数据量
 float scrWidth = 1200;
@@ -55,12 +59,13 @@ float samplingRate = realTimeSamplingRate; //转换后的采样率，单位MHz�
 int overSamplingDigit = 1;                 // 过采样。1既没有过采样，16既4位过采样
 float trigLevel = 0;
 float trigLevelState = 100;
+bool waveTrig = false;
 bool trigAverage = false; //多次触发图像做平均
 bool wavePause = false;
-bool waveTrig = false;
 int autoPeriodNum = 3;
 int autoVoltageNum = 6;
 float scrollSensitivity = 1;
+int maxColorGrade = 32; //三维图像渲染颜色等级
 
 HANDLE threadHandle;
 unsigned threadCount = 0;
@@ -68,8 +73,12 @@ unsigned threadNum = 0;
 GLFWwindow *window;
 BackgroundRender background;
 WaveRenderer wave;
+ThreeDimWaveRenderer wave3d;
+
 float waveFormData[VIEW_DATA_SIZE * 2];
 float waveData[DATA_SIZE];
+unsigned char threeDimDataBase[1024][512];
+float threeDimWaveData[1024 * 512 * 3];
 
 glm::vec3 backgroundColor(0.1f, 0.1f, 0.1f);
 glm::vec3 waveColor(1.0f, 1.0f, 0.0f);
@@ -106,10 +115,13 @@ void drawWaveForm()
 #else
     threadRestart();
 #endif
-    if (!wavePause)
-        wave.ResetWaveData(waveFormData, dataSize);
+    // if (!wavePause)
+    //     wave.ResetWaveData(waveFormData, dataSize);
+    // background.drawBackground(timeStep, scaleState, offsetState.y + offset.y, trigLevel + trigLevelState); //画网格
+    // wave.RenderWave(offsetState + offset, timeStep * samplingRate, scaleState, waveColor);                 //画波形
+    wave3d.ResetWaveData(threeDimWaveData, sizeof(threeDimWaveData));
+    wave3d.RenderWave(offsetState + offset, timeStep * samplingRate, scaleState);                          //画波形
     background.drawBackground(timeStep, scaleState, offsetState.y + offset.y, trigLevel + trigLevelState); //画网格
-    wave.RenderWave(offsetState + offset, timeStep * samplingRate, scaleState, waveColor);                 //画波形
 }
 
 void windowInit()
@@ -140,6 +152,9 @@ void windowInit()
     }
     wave.WaveRenderInit("shader/wave.vs", "shader/wave.fs");
     wave.SetWaveAttribute(TIME_DIVS, -5000, 5000);
+    wave3d.WaveRenderInit("shader/colorfulwave.vs", "shader/colorfulwave.fs");
+    wave3d.SetWaveAttribute(TIME_DIVS, -5000, 5000);
+    wave3d.SetColorAttribute(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 0.0f), 32);
     background.BackgroundRenderInit(scrWidth, scrHeight);
     background.setSize(scrWidth, scrHeight, scrWidth * 0.1, scrHeight * 0.06, viewWidth, viewHeight);
 }
@@ -156,6 +171,7 @@ void configurationInit()
         const std::unique_ptr<Json::StreamWriter> writer(writerBuilder.newStreamWriter());
         Json::Value root;
         Json::Value color;
+        Json::Value wave_3d;
         for (int i = 0; i < 3; i++)
         {
             color["background"].append(0.1f);
@@ -167,12 +183,20 @@ void configurationInit()
         }
         color["icon"].append(1.0f);
         color["iconClick"].append(0.0f);
-        color["wave"].append({1.0f});
+        color["wave"].append(1.0f);
         color["wave"].append(1.0f);
         color["wave"].append(0.0f);
         color["trig"].append(0.9f);
         color["trig"].append(0.3f);
         color["trig"].append(0.1f);
+        wave_3d["begin"].append(0.0f);
+        wave_3d["begin"].append(0.0f);
+        wave_3d["begin"].append(0.0f);
+        wave_3d["end"].append(1.0f);
+        wave_3d["end"].append(1.0f);
+        wave_3d["end"].append(0.0f);
+        wave_3d["grade"] = 32;
+        color["wave3d"] = wave_3d;
         root["color"] = color;
         root["rate"] = realTimeSamplingRate;
         root["auto"].append(autoVoltageNum);
@@ -206,15 +230,46 @@ void configurationInit()
     autoVoltageNum = root["auto"][0].asInt();
     autoPeriodNum = root["auto"][1].asInt();
     Json::Value color = root["color"];
-    backgroundColor = glm::vec3(color["background"][0].asFloat(), color["background"][1].asFloat(), color["background"][2].asFloat());
-    waveColor = glm::vec3(color["wave"][0].asFloat(), color["wave"][1].asFloat(), color["wave"][2].asFloat());
-    iconColor = glm::vec4(color["icon"][0].asFloat(), color["icon"][1].asFloat(), color["icon"][2].asFloat(), color["icon"][3].asFloat());
-    iconClickColor = glm::vec4(color["iconClick"][0].asFloat(), color["iconClick"][1].asFloat(), color["iconClick"][2].asFloat(), color["iconClick"][3].asFloat());
-    background.borderColor = glm::vec3(color["bordor"][0].asFloat(), color["bordor"][1].asFloat(), color["bordor"][2].asFloat());
-    background.gridColor = glm::vec3(color["grid"][0].asFloat(), color["grid"][1].asFloat(), color["grid"][2].asFloat());
-    background.textColor = glm::vec3(color["text"][0].asFloat(), color["text"][1].asFloat(), color["text"][2].asFloat());
-    background.trigLineColor = glm::vec3(color["trig"][0].asFloat(), color["trig"][1].asFloat(), color["trig"][2].asFloat());
+    backgroundColor = glm::vec3(
+        color["background"][0].asFloat(),
+        color["background"][1].asFloat(),
+        color["background"][2].asFloat());
+    waveColor = glm::vec3(
+        color["wave"][0].asFloat(),
+        color["wave"][1].asFloat(),
+        color["wave"][2].asFloat());
+    iconColor = glm::vec4(
+        color["icon"][0].asFloat(),
+        color["icon"][1].asFloat(),
+        color["icon"][2].asFloat(),
+        color["icon"][3].asFloat());
+    iconClickColor = glm::vec4(
+        color["iconClick"][0].asFloat(),
+        color["iconClick"][1].asFloat(),
+        color["iconClick"][2].asFloat(),
+        color["iconClick"][3].asFloat());
+    background.borderColor = glm::vec3(
+        color["bordor"][0].asFloat(),
+        color["bordor"][1].asFloat(),
+        color["bordor"][2].asFloat());
+    background.gridColor = glm::vec3(
+        color["grid"][0].asFloat(),
+        color["grid"][1].asFloat(),
+        color["grid"][2].asFloat());
+    background.textColor = glm::vec3(
+        color["text"][0].asFloat(),
+        color["text"][1].asFloat(),
+        color["text"][2].asFloat());
+    background.trigLineColor = glm::vec3(
+        color["trig"][0].asFloat(),
+        color["trig"][1].asFloat(),
+        color["trig"][2].asFloat());
     background.iconTexture.color = iconColor;
+    Json::Value wave_3d = color["wave3d"];
+    wave3d.SetColorAttribute(
+        glm::vec3(wave_3d["begin"][0].asFloat(), wave_3d["begin"][1].asFloat(), wave_3d["begin"][2].asFloat()),
+        glm::vec3(wave_3d["end"][0].asFloat(), wave_3d["end"][1].asFloat(), wave_3d["end"][2].asFloat()),
+        wave_3d["grade"].asInt());
     ifs.close();
 }
 
@@ -581,8 +636,48 @@ void dataTrig_direct()
         return;
     }
 }
+void threeDimWavaDataMapper()
+{
+    float level = trigLevelState + trigLevel;
+    // int preTrigDepth = TIME_DIVS / 2 * timeStep * samplingRate; //暂时没有用，预触发深度始终在中间
+    int trigNum = 0;
+    memset(threeDimDataBase, 0, sizeof(threeDimDataBase));
+    for (int i = 1024 / 2; i < dataSize - 1024 / 2; i++)
+    {
+        if ((waveData[i] > level) && (waveData[i - 1] < level))
+        {
+            for (int j = 0; j < 1024; j++) //触发点在波形数据中间
+            {
+                int yDim = (int)(waveData[i + j - 1024 / 2] / 5000 * 256 + 256);
+                yDim = (yDim > 511) ? 511 : ((yDim < 0) ? 0 : yDim);
+                if (threeDimDataBase[j][yDim] < 255)
+                    threeDimDataBase[j][yDim]++;
+            }
+            i += 1024;
+            trigNum++;
+        }
+    }
+    for (int i = 0; i < 1024; i++)
+    {
+        for (int j = 0; j < 512; j++)
+        {
+            threeDimWaveData[(i * 512 + j) * 3] = i;
+            threeDimWaveData[(i * 512 + j) * 3 + 1] = (j - 256) * 5000 / 256;
+            threeDimWaveData[(i * 512 + j) * 3 + 2] = threeDimDataBase[i][j];
+        }
+    }
+    dataSize = 1024;
+}
 void dataProcessing()
 {
+    overSamplingDigit = 1;
+    waveTrig = true;
+    background.ifTrig = waveTrig;
+    trigAverage = false;
+    wavePause = false;
+    dataSize = DATA_SIZE;
+    threeDimWavaDataMapper();
+    return;
     waveOverSampling();
     if (waveTrig)
     {
@@ -659,7 +754,13 @@ void threadRestart()
         }
     }
 }
-
+double Gaussian_noise(double mean, double stddev)
+{
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+    std::default_random_engine generator(seed);
+    std::normal_distribution<double> dist(mean, stddev);
+    return dist(generator);
+}
 #if DEBUG
 UINT Receive_Data(LPVOID lpVoid)
 {
@@ -671,10 +772,10 @@ UINT Receive_Data(LPVOID lpVoid)
         float period = debugWavePeriod * realTimeSamplingRate;
         for (unsigned i = 0; i < DATA_SIZE; i++)
         {
-            waveData[i] = debugWaveRange / 2 * sin((float)i * 6.2832f / period + timeValue) + debugWaveOffset;
+            waveData[i] = Gaussian_noise(1, 0.2) * debugWaveRange / 2 * sin((float)i * 6.2832f / period + timeValue) + debugWaveOffset;
         }
         dataProcessing();
-        Sleep(500);
+        Sleep(2500);
     }
     return 0;
 }

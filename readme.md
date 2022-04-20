@@ -34,4 +34,3 @@ FPGA获取数据发送到上位机显示波形。
 > scroll: 滚轮敏感度
 > 
 > debug: debug时模拟正弦波的峰峰值(mv)，直流偏置(mv)，周期(us)
-zigzagsontest12

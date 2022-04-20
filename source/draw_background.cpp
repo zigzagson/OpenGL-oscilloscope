@@ -253,7 +253,7 @@ void BackgroundRender::drawBackground(float xStep, float yScale, float offset, f
         std::string value = this->volBox.valueString;
         if (value.length() >= 4)
             value = value.substr(value.length() - 4);
-        this->valueText.RenderText(value, this->viewportX * 1.916, this->viewportY * 0.5 - this->fontSize / 2, 0.9f, this->textColor);
+        this->valueText.RenderText(value, this->viewportX * 1.916, this->viewportY * 0.5 - this->fontSize / 2, 0.9f, glm::vec3(0.9f, 0.9f, 0.9f));
     }
     if (this->timeBox.ifInputBoxShow == true)
     {
@@ -261,7 +261,7 @@ void BackgroundRender::drawBackground(float xStep, float yScale, float offset, f
         std::string value = this->timeBox.valueString;
         if (value.length() >= 3)
             value = value.substr(value.length() - 3);
-        this->valueText.RenderText(value, this->viewportX * 3.96, this->viewportY * 0.5 - this->fontSize / 2, 0.9f, this->textColor);
+        this->valueText.RenderText(value, this->viewportX * 3.96, this->viewportY * 0.5 - this->fontSize / 2, 0.9f, glm::vec3(0.9f, 0.9f, 0.9f));
     }
     float paraX = this->viewportX * 1.1 + this->viewportW;
     float paraY = this->viewportY * 9;
