@@ -14,7 +14,7 @@ void BackgroundRender::BackgroundRenderInit(float scrWidth, float scrHeight)
     this->valueText.Load(valueFontPath, this->fontSize);
     this->valueText.LoadChinese((wchar_t *)L"攀登计划", "fonts/兰亭序书法字体.ttf", this->fontSize * 2);
     this->valueText.LoadChinese((wchar_t *)L"周碧松张震籍北", "fonts/FZKTK.TTF", this->fontSize);
-    this->valueText.LoadChinese((wchar_t *)L"普通平均过采样", "fonts/simsun.ttc", this->fontSize);
+    this->valueText.LoadChinese((wchar_t *)L"普通平均过采样三维模式", "fonts/simsun.ttc", this->fontSize);
     this->borderColor = glm::vec3(0.9f, 0.9f, 0.9f);
     this->gridColor = glm::vec3(0.6f, 0.6f, 0.6f);
     this->trigLineColor = glm::vec3(0.9f, 0.3f, 0.1f);
@@ -138,7 +138,7 @@ void BackgroundRender::setSize(float scrWidth, float scrHeight, float viewportX,
     this->valueText.ClearChinese();
     this->valueText.LoadChinese((wchar_t *)L"攀登计划", "fonts/兰亭序书法字体.ttf", this->fontSize * 2);
     this->valueText.LoadChinese((wchar_t *)L"周碧松张震籍北", "fonts/FZKTK.TTF", this->fontSize);
-    this->valueText.LoadChinese((wchar_t *)L"普通平均过采样", "fonts/simsun.ttc", this->fontSize);
+    this->valueText.LoadChinese((wchar_t *)L"普通平均过采样三维模式", "fonts/simsun.ttc", this->fontSize);
     this->iconTexture.SetProjection(scrWidth, scrHeight);
     this->iconTexture.SetPosition(scrWidth * 0.84f, scrHeight - scrWidth * 0.16f, scrWidth * 0.12f, scrWidth * 0.12f);
     this->volBox.setPosition(scrWidth, scrHeight, viewportX * 1.886, viewportY * 0.42 - this->fontSize / 2, this->fontSize * 2.4, this->fontSize);
@@ -253,7 +253,7 @@ void BackgroundRender::drawBackground(float xStep, float yScale, float offset, f
         std::string value = this->volBox.valueString;
         if (value.length() >= 4)
             value = value.substr(value.length() - 4);
-        this->valueText.RenderText(value, this->viewportX * 1.916, this->viewportY * 0.5 - this->fontSize / 2, 0.9f, this->textColor);
+        this->valueText.RenderText(value, this->viewportX * 1.916, this->viewportY * 0.5 - this->fontSize / 2, 0.9f, glm::vec3(0.1f, 0.1f, 0.1f));
     }
     if (this->timeBox.ifInputBoxShow == true)
     {
@@ -261,19 +261,11 @@ void BackgroundRender::drawBackground(float xStep, float yScale, float offset, f
         std::string value = this->timeBox.valueString;
         if (value.length() >= 3)
             value = value.substr(value.length() - 3);
-        this->valueText.RenderText(value, this->viewportX * 3.96, this->viewportY * 0.5 - this->fontSize / 2, 0.9f, this->textColor);
+        this->valueText.RenderText(value, this->viewportX * 3.96, this->viewportY * 0.5 - this->fontSize / 2, 0.9f, glm::vec3(0.1f, 0.1f, 0.1f));
     }
     float paraX = this->viewportX * 1.1 + this->viewportW;
     float paraY = this->viewportY * 9;
     float paraD = this->viewportY * 1;
-    for (int i = 0; i < 6; i++)
-    {
-        std::string valueString = std::to_string(this->measuredValue[i].value);
-        valueString.erase(valueString.find(".") + 4); //舍掉小数点后三位
-        this->valueText.RenderText(this->measuredValue[i].name + ":", paraX, paraY - i * paraD, 1.0f, this->textColor);
-        this->valueText.RenderTextAlignRight(valueString, paraX * 1.195, paraY - i * paraD, 1.0f, this->textColor);
-        this->valueText.RenderText(this->measuredValue[i].unit, paraX * 1.2, paraY - i * paraD, 1.0f, this->textColor);
-    }
     this->valueText.RenderChinese((wchar_t *)L"攀", this->viewportX * 0.1, this->scrHeight * 0.9, 1.0f, this->textColor);
     this->valueText.RenderChinese((wchar_t *)L"登", this->viewportX * 0.1, this->scrHeight * 0.8, 1.0f, this->textColor);
     this->valueText.RenderChinese((wchar_t *)L"计", this->viewportX * 0.1, this->scrHeight * 0.7, 1.0f, this->textColor);
@@ -285,20 +277,36 @@ void BackgroundRender::drawBackground(float xStep, float yScale, float offset, f
     this->valueText.RenderChinese((wchar_t *)L"周碧松", this->viewportX * 8.5, paraY - 7.5 * paraD, 1.0f, this->textColor);
     this->valueText.RenderChinese((wchar_t *)L"张震", this->viewportX * 8.5, paraY - 8.1 * paraD, 1.0f, this->textColor);
     this->valueText.RenderChinese((wchar_t *)L"籍北", this->viewportX * 8.5, paraY - 8.7 * paraD, 1.0f, this->textColor);
+    if (this->ifThreeDim)
+    {
+        this->valueText.RenderChinese((wchar_t *)L"三维模式", this->scrWidth * 0.82, this->scrHeight * 0.61, 1.2f, this->textColor);
+    }
+    else
+    {
+        this->valueText.RenderChinese((wchar_t *)L"三维模式", this->scrWidth * 0.82, this->scrHeight * 0.61, 1.2f, glm::vec3(0.6f, 0.6f, 0.6f));
+        for (int i = 0; i < 6; i++)
+        {
+            std::string valueString = std::to_string(this->measuredValue[i].value);
+            valueString.erase(valueString.find(".") + 4); //舍掉小数点后三位
+            this->valueText.RenderText(this->measuredValue[i].name + ":", paraX, paraY - i * paraD, 1.0f, this->textColor);
+            this->valueText.RenderTextAlignRight(valueString, paraX * 1.195, paraY - i * paraD, 1.0f, this->textColor);
+            this->valueText.RenderText(this->measuredValue[i].unit, paraX * 1.2, paraY - i * paraD, 1.0f, this->textColor);
+        }
+        if (this->ifOverSampling)
+            this->valueText.RenderChinese((wchar_t *)L"过采样", this->scrWidth * 0.82, this->scrHeight * 0.66, 1.2f, this->textColor);
+        else
+            this->valueText.RenderChinese((wchar_t *)L"过采样", this->scrWidth * 0.82, this->scrHeight * 0.66, 1.2f, glm::vec3(0.6f, 0.6f, 0.6f));
+        if (this->ifTrig)
+        {
+            if (this->ifTrigAverage)
+                this->valueText.RenderChinese((wchar_t *)L"平均", this->scrWidth * 0.92, this->scrHeight * 0.66, 1.2f, this->textColor);
+            else
+                this->valueText.RenderChinese((wchar_t *)L"平均", this->scrWidth * 0.92, this->scrHeight * 0.66, 1.2f, glm::vec3(0.6f, 0.6f, 0.6f));
+            this->valueText.RenderText("trigger", this->viewportX * 6, this->viewportY * 0.5 - this->fontSize / 2, 1.0f, this->textColor);
+        }
+    }
     if (this->ifPause)
         this->valueText.RenderText("pause", this->viewportX * 5, this->viewportY * 0.5 - this->fontSize / 2, 1.0f, this->textColor);
-    if (this->ifOverSampling)
-        this->valueText.RenderChinese((wchar_t *)L"过采样", this->scrWidth * 0.82, this->scrHeight * 0.66, 1.2f, this->textColor);
-    else
-        this->valueText.RenderChinese((wchar_t *)L"过采样", this->scrWidth * 0.82, this->scrHeight * 0.66, 1.2f, glm::vec3(0.6f, 0.6f, 0.6f));
-    if (this->ifTrig)
-    {
-        if (this->ifTrigAverage)
-            this->valueText.RenderChinese((wchar_t *)L"平均", this->scrWidth * 0.92, this->scrHeight * 0.66, 1.2f, this->textColor);
-        else
-            this->valueText.RenderChinese((wchar_t *)L"平均", this->scrWidth * 0.92, this->scrHeight * 0.66, 1.2f, glm::vec3(0.6f, 0.6f, 0.6f));
-        this->valueText.RenderText("trigger", this->viewportX * 6, this->viewportY * 0.5 - this->fontSize / 2, 1.0f, this->textColor);
-    }
     glDisable(GL_BLEND);
     glViewport(this->viewportX, this->viewportY, this->viewportW, this->viewportH);
     glm::mat4 transform;
