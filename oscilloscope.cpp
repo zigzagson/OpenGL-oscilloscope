@@ -639,12 +639,13 @@ void dataTrig_direct()
 void threeDimWavaDataMapper()
 {
     float level = trigLevelState + trigLevel;
+    float trig_hysteresis = 10;
     // int preTrigDepth = TIME_DIVS / 2 * timeStep * samplingRate; //暂时没有用，预触发深度始终在中间
     int trigNum = 0;
     memset(threeDimDataBase, 0, sizeof(threeDimDataBase));
     for (int i = 1024 / 2; i < dataSize - 1024 / 2; i++)
     {
-        if ((waveData[i] > level) && (waveData[i - 1] < level))
+        if ((waveData[i+2] > level) && (waveData[i+1] > level) && (waveData[i] > level) && (waveData[i - 1] < (level/*-trig_hysteresis*/)) && (waveData[i - 2] < (level/*-trig_hysteresis*/)))
         {
             for (int j = 0; j < 1024; j++) //触发点在波形数据中间
             {
