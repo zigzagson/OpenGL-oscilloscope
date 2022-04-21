@@ -7,11 +7,14 @@
 
 #include "udp_upper.h"
 #include "wave_renderer.h"
+#include "three_dim_wave_renderer.h"
 #include "draw_background.h"
 #include <iostream>
 #include <fstream>
 #include <windows.h>
+#include <chrono>
 #include <cmath>
+#include <random>
 
 #define DEBUG 1
 
@@ -29,15 +32,16 @@ void drawWaveForm();
 void waveParameter();
 void waveAutoSet();
 void dataProcessing();
-void waveOverSampling(); //前后overSamplingDigit个点做平均
-void dataTrig();         //平均模式触发
-void dataTrig_direct();  //单次触发
+void waveOverSampling();       //前后overSamplingDigit个点做平均
+void dataTrig();               //平均模式触发
+void dataTrig_direct();        //单次触发
+void threeDimWavaDataMapper(); //三维波形数据映射
 UINT Receive_Data(LPVOID lpVoid);
 void threadRestart();
 
 #define DATA_SIZE 262144
 #define VIEW_DATA_SIZE 8192
-#define VIEWADLE_DATA_SIZE 600
+//#define VIEWADLE_DATA_SIZE 600
 #define TIME_DIVS 12
 int dataSize = DATA_SIZE; //实际使用数据量
 float scrWidth = 1200;
@@ -49,15 +53,17 @@ glm::vec2 offset(0.0f, 0.0f);       //偏移，既图像拖动量; 横轴单位�
 glm::vec2 offsetState(-0.0f, 0.0f); //历史偏移状态记录
 float scaleState = 1;               //纵轴缩放，窗口显示10000/scaleState个mV
 float timeStep = 1;                 //横轴步长，1/TIME_DIVS个窗口内的时间(us)
-int timeExponent = 0;
-float realTimeSamplingRate = 50;           //实时采样率，单位MHz
-float samplingRate = realTimeSamplingRate; //转换后的采样率，单位MHz（points/us）
-int overSamplingDigit = 1;                 // 过采样。1既没有过采样，16既4位过采样
+int timeExponent = 0;               //使timeStep大于10^x的最大x值,暂时没用
+float realTimeSamplingRate = 50;    //实时采样率，单位MHz
+float samplingRate = 50;            //转换后的采样率，单位MHz（points/us）
+int overSamplingDigit = 1;          // 过采样。1既没有过采样，16既4位过采样
 float trigLevel = 0;
 float trigLevelState = 100;
+bool waveTrig = false;
 bool trigAverage = false; //多次触发图像做平均
 bool wavePause = false;
-bool waveTrig = false;
+bool threeDim = false;
+
 int autoPeriodNum = 3;
 int autoVoltageNum = 6;
 float scrollSensitivity = 1;
@@ -68,8 +74,12 @@ unsigned threadNum = 0;
 GLFWwindow *window;
 BackgroundRender background;
 WaveRenderer wave;
+ThreeDimWaveRenderer wave3d;
+
 float waveFormData[VIEW_DATA_SIZE * 2];
 float waveData[DATA_SIZE];
+unsigned char threeDimDataBase[1024][512];
+float threeDimWaveData[1024 * 512 * 3];
 
 glm::vec3 backgroundColor(0.1f, 0.1f, 0.1f);
 glm::vec3 waveColor(1.0f, 1.0f, 0.0f);
@@ -106,10 +116,20 @@ void drawWaveForm()
 #else
     threadRestart();
 #endif
-    if (!wavePause)
-        wave.ResetWaveData(waveFormData, dataSize);
-    background.drawBackground(timeStep, scaleState, offsetState.y + offset.y, trigLevel + trigLevelState); //画网格
-    wave.RenderWave(offsetState + offset, timeStep * samplingRate, scaleState, waveColor);                 //画波形
+    if (threeDim)
+    {
+        if (!wavePause)
+            wave3d.ResetWaveData(threeDimWaveData, sizeof(threeDimWaveData));
+        wave3d.RenderWave(offsetState + offset, timeStep * samplingRate, scaleState);                          //画波形
+        background.drawBackground(timeStep, scaleState, offsetState.y + offset.y, trigLevel + trigLevelState); //画网格
+    }
+    else
+    {
+        if (!wavePause)
+            wave.ResetWaveData(waveFormData, dataSize);
+        background.drawBackground(timeStep, scaleState, offsetState.y + offset.y, trigLevel + trigLevelState); //画网格
+        wave.RenderWave(offsetState + offset, timeStep * samplingRate, scaleState, waveColor);                 //画波形
+    }
 }
 
 void windowInit()
@@ -140,6 +160,9 @@ void windowInit()
     }
     wave.WaveRenderInit("shader/wave.vs", "shader/wave.fs");
     wave.SetWaveAttribute(TIME_DIVS, -5000, 5000);
+    wave3d.WaveRenderInit("shader/colorfulwave.vs", "shader/colorfulwave.fs");
+    wave3d.SetWaveAttribute(TIME_DIVS, -5000, 5000);
+    wave3d.SetColorAttribute(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 0.0f), 32);
     background.BackgroundRenderInit(scrWidth, scrHeight);
     background.setSize(scrWidth, scrHeight, scrWidth * 0.1, scrHeight * 0.06, viewWidth, viewHeight);
 }
@@ -156,6 +179,7 @@ void configurationInit()
         const std::unique_ptr<Json::StreamWriter> writer(writerBuilder.newStreamWriter());
         Json::Value root;
         Json::Value color;
+        Json::Value wave_3d;
         for (int i = 0; i < 3; i++)
         {
             color["background"].append(0.1f);
@@ -167,12 +191,20 @@ void configurationInit()
         }
         color["icon"].append(1.0f);
         color["iconClick"].append(0.0f);
-        color["wave"].append({1.0f});
+        color["wave"].append(1.0f);
         color["wave"].append(1.0f);
         color["wave"].append(0.0f);
         color["trig"].append(0.9f);
         color["trig"].append(0.3f);
         color["trig"].append(0.1f);
+        wave_3d["begin"].append(0.0f);
+        wave_3d["begin"].append(0.0f);
+        wave_3d["begin"].append(0.0f);
+        wave_3d["end"].append(1.0f);
+        wave_3d["end"].append(1.0f);
+        wave_3d["end"].append(0.0f);
+        wave_3d["grade"] = 32;
+        color["wave3d"] = wave_3d;
         root["color"] = color;
         root["rate"] = realTimeSamplingRate;
         root["auto"].append(autoVoltageNum);
@@ -206,15 +238,46 @@ void configurationInit()
     autoVoltageNum = root["auto"][0].asInt();
     autoPeriodNum = root["auto"][1].asInt();
     Json::Value color = root["color"];
-    backgroundColor = glm::vec3(color["background"][0].asFloat(), color["background"][1].asFloat(), color["background"][2].asFloat());
-    waveColor = glm::vec3(color["wave"][0].asFloat(), color["wave"][1].asFloat(), color["wave"][2].asFloat());
-    iconColor = glm::vec4(color["icon"][0].asFloat(), color["icon"][1].asFloat(), color["icon"][2].asFloat(), color["icon"][3].asFloat());
-    iconClickColor = glm::vec4(color["iconClick"][0].asFloat(), color["iconClick"][1].asFloat(), color["iconClick"][2].asFloat(), color["iconClick"][3].asFloat());
-    background.borderColor = glm::vec3(color["bordor"][0].asFloat(), color["bordor"][1].asFloat(), color["bordor"][2].asFloat());
-    background.gridColor = glm::vec3(color["grid"][0].asFloat(), color["grid"][1].asFloat(), color["grid"][2].asFloat());
-    background.textColor = glm::vec3(color["text"][0].asFloat(), color["text"][1].asFloat(), color["text"][2].asFloat());
-    background.trigLineColor = glm::vec3(color["trig"][0].asFloat(), color["trig"][1].asFloat(), color["trig"][2].asFloat());
+    backgroundColor = glm::vec3(
+        color["background"][0].asFloat(),
+        color["background"][1].asFloat(),
+        color["background"][2].asFloat());
+    waveColor = glm::vec3(
+        color["wave"][0].asFloat(),
+        color["wave"][1].asFloat(),
+        color["wave"][2].asFloat());
+    iconColor = glm::vec4(
+        color["icon"][0].asFloat(),
+        color["icon"][1].asFloat(),
+        color["icon"][2].asFloat(),
+        color["icon"][3].asFloat());
+    iconClickColor = glm::vec4(
+        color["iconClick"][0].asFloat(),
+        color["iconClick"][1].asFloat(),
+        color["iconClick"][2].asFloat(),
+        color["iconClick"][3].asFloat());
+    background.borderColor = glm::vec3(
+        color["bordor"][0].asFloat(),
+        color["bordor"][1].asFloat(),
+        color["bordor"][2].asFloat());
+    background.gridColor = glm::vec3(
+        color["grid"][0].asFloat(),
+        color["grid"][1].asFloat(),
+        color["grid"][2].asFloat());
+    background.textColor = glm::vec3(
+        color["text"][0].asFloat(),
+        color["text"][1].asFloat(),
+        color["text"][2].asFloat());
+    background.trigLineColor = glm::vec3(
+        color["trig"][0].asFloat(),
+        color["trig"][1].asFloat(),
+        color["trig"][2].asFloat());
     background.iconTexture.color = iconColor;
+    Json::Value wave_3d = color["wave3d"];
+    wave3d.SetColorAttribute(
+        glm::vec3(wave_3d["begin"][0].asFloat(), wave_3d["begin"][1].asFloat(), wave_3d["begin"][2].asFloat()),
+        glm::vec3(wave_3d["end"][0].asFloat(), wave_3d["end"][1].asFloat(), wave_3d["end"][2].asFloat()),
+        wave_3d["grade"].asInt());
     ifs.close();
 }
 
@@ -241,9 +304,6 @@ void mouse_scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
         timeStep *= pow(10, -scrollSensitivity * yoffset / 10);
         if (timeStep < 1 || timeStep >= 1000000)
             timeStep *= pow(10, scrollSensitivity * yoffset / 10);
-        timeExponent = 0;
-        for (int temp = timeStep; temp >= 10; timeExponent++)
-            temp /= 10;
     }
 }
 void mouse_press_callback(GLFWwindow *window, int button, int action, int mods)
@@ -285,10 +345,15 @@ void mouse_press_callback(GLFWwindow *window, int button, int action, int mods)
             else
                 overSamplingDigit = 1;
         }
-        if (posX > scrWidth * 0.92 && posX < scrWidth * 0.98 && posY > scrHeight * 0.32 && posY < scrHeight * 0.35) //触发是否平均
+        if (posX > scrWidth * 0.92 && posX < scrWidth * 0.98 && posY > scrHeight * 0.32 && posY < scrHeight * 0.35) //触发是否平均模式
         {
             trigAverage = !trigAverage;
             background.ifTrigAverage = trigAverage;
+        }
+        if (posX > scrWidth * 0.82 && posX < scrWidth * 0.88 && posY > scrHeight * 0.36 && posY < scrHeight * 0.39) //是否三维映射
+        {
+            threeDim = !threeDim;
+            background.ifThreeDim = threeDim;
         }
         if (Rsquare < scrWidth * 0.06 * scrWidth * 0.06)
         {
@@ -350,9 +415,10 @@ void mouse_cursor_callback(GLFWwindow *window, double xpos, double ypos)
     }
     if (type == 0)
     {
-        if (waveTrig == 0)
-            offset.x = (xpos - firstX) / viewWidth * timeStep * samplingRate;
+        offset.x = (xpos - firstX) / viewWidth * timeStep * samplingRate;
         offset.y = (ypos - firstY) / viewHeight / scaleState;
+        if (waveTrig)
+            offset.x = 0;
     }
     if (type && waveTrig)
         trigLevel = -(ypos - firstY) * 10000 / viewHeight / scaleState;
@@ -388,9 +454,6 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
             {
                 timeStep = background.timeBox.getInputValue();
                 background.timeBox.exitInputBox();
-                timeExponent = 0;
-                for (int temp = timeStep; temp >= 10; timeExponent++)
-                    temp /= 10;
             }
             else if (key >= GLFW_KEY_0 && key <= GLFW_KEY_9)
             {
@@ -455,6 +518,7 @@ void waveParameter()
             break;
         }
     }
+    average = 0;
     for (int i = min_index; i < max_index; i++)
         average += waveFormData[2 * i + 1];
     average = average / freq_points;
@@ -487,9 +551,6 @@ void waveAutoSet()
     timeStep = autoPeriodNum * period / TIME_DIVS;
     if (timeStep == 0)
         timeStep = 100;
-    timeExponent = 0;
-    for (int temp = timeStep; temp >= 10; timeExponent++)
-        temp /= 10;
     offsetState.x = 0;
 }
 
@@ -581,58 +642,126 @@ void dataTrig_direct()
         return;
     }
 }
+void threeDimWavaDataMapper()
+{
+    float level = trigLevelState + trigLevel;
+    // int preTrigDepth = TIME_DIVS / 2 * timeStep * samplingRate; //暂时没有用，预触发深度始终在中间
+    int trigNum = 0;
+    memset(threeDimDataBase, 0, sizeof(threeDimDataBase));
+    for (int i = 1024 / 2; i < dataSize - 1024 / 2; i++)
+    {
+        if ((waveData[i] > level) && (waveData[i - 1] < level))
+        {
+            for (int j = 0; j < 1024; j++) //触发点在波形数据中间
+            {
+                int yDim = (int)(waveData[i + j - 1024 / 2] / 5000 * 256 + 256);
+                yDim = (yDim > 511) ? 511 : ((yDim < 0) ? 0 : yDim);
+                if (threeDimDataBase[j][yDim] < 255)
+                    threeDimDataBase[j][yDim]++;
+            }
+            i += 1024;
+            trigNum++;
+        }
+    }
+    for (int i = 0; i < 1024; i++)
+    {
+        for (int j = 0; j < 512; j++)
+        {
+            threeDimWaveData[(i * 512 + j) * 3] = i;
+            threeDimWaveData[(i * 512 + j) * 3 + 1] = (j - 256) * 5000 / 256;
+            threeDimWaveData[(i * 512 + j) * 3 + 2] = threeDimDataBase[i][j];
+        }
+    }
+    dataSize = 1024;
+}
 void dataProcessing()
 {
-    waveOverSampling();
-    if (waveTrig)
+    dataSize = DATA_SIZE;
+    samplingRate = realTimeSamplingRate;
+    timeExponent = 0;
+    for (int temp = timeStep; temp >= 10; timeExponent++)
+        temp /= 10;
+
+    if (threeDim)
     {
-        if (timeExponent >= 1 && overSamplingDigit == 1)
+        waveTrig = true;
+        background.ifTrig = true;
+        for (int temp = timeStep, i = 0; temp >= 2 && i < 5; temp /= 2, i++)
         {
-            dataSize /= 10;
-            samplingRate /= 10;
+            dataSize /= 2;
+            samplingRate /= 2;
             for (int i = 0; i < dataSize; i++)
             {
-                waveData[i] = waveData[10 * i];
+                waveData[i] = waveData[2 * i];
             }
         }
-        if (trigAverage)
-            dataTrig();
-        else
-            dataTrig_direct();
+        threeDimWavaDataMapper();
     }
     else
     {
-        if (timeExponent == 0)
+        waveOverSampling();
+        if (waveTrig)
         {
-            for (int i = 0; i < VIEW_DATA_SIZE; i++)
+            if (overSamplingDigit == 1)
             {
-                waveFormData[2 * i] = (float)i;
-                waveFormData[2 * i + 1] = waveData[i];
+                if (timeStep >= 8 && timeStep < 16)
+                {
+                    dataSize /= 8;
+                    samplingRate /= 8;
+                    for (int i = 0; i < dataSize; i++)
+                    {
+                        waveData[i] = waveData[8 * i];
+                    }
+                }
+                else if (timeStep >= 16)
+                {
+                    dataSize /= 16;
+                    samplingRate /= 16;
+                    for (int i = 0; i < dataSize; i++)
+                    {
+                        waveData[i] = waveData[16 * i];
+                    }
+                }
             }
-        }
-        else if (timeExponent == 1)
-        {
-            dataSize /= 10;
-            samplingRate /= 10;
-            for (int i = 0; i < VIEW_DATA_SIZE && i < dataSize; i++)
-            {
-                waveFormData[2 * i] = (float)i;
-                waveFormData[2 * i + 1] = waveData[10 * i];
-            }
+            if (trigAverage)
+                dataTrig();
+            else
+                dataTrig_direct();
         }
         else
         {
-            dataSize /= 100;
-            samplingRate /= 100;
-            for (int i = 0; i < VIEW_DATA_SIZE && i < dataSize; i++)
+            if (timeStep < 8)
             {
-                waveFormData[2 * i] = (float)i;
-                waveFormData[2 * i + 1] = waveData[100 * i];
+                for (int i = 0; i < VIEW_DATA_SIZE; i++)
+                {
+                    waveFormData[2 * i] = (float)i;
+                    waveFormData[2 * i + 1] = waveData[i];
+                }
+            }
+            else if (timeStep < 32)
+            {
+                dataSize /= 8;
+                samplingRate /= 8;
+                for (int i = 0; i < VIEW_DATA_SIZE && i < dataSize; i++)
+                {
+                    waveFormData[2 * i] = (float)i;
+                    waveFormData[2 * i + 1] = waveData[8 * i];
+                }
+            }
+            else
+            {
+                dataSize /= 32;
+                samplingRate /= 32;
+                for (int i = 0; i < VIEW_DATA_SIZE && i < dataSize; i++)
+                {
+                    waveFormData[2 * i] = (float)i;
+                    waveFormData[2 * i + 1] = waveData[32 * i];
+                }
             }
         }
+        dataSize = (dataSize < VIEW_DATA_SIZE) ? dataSize : VIEW_DATA_SIZE;
+        waveParameter();
     }
-    dataSize = (dataSize < VIEW_DATA_SIZE) ? dataSize : VIEW_DATA_SIZE;
-    waveParameter();
 }
 
 void threadRestart()
@@ -659,7 +788,13 @@ void threadRestart()
         }
     }
 }
-
+double Gaussian_noise(double mean, double stddev)
+{
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+    std::default_random_engine generator(seed);
+    std::normal_distribution<double> dist(mean, stddev);
+    return dist(generator);
+}
 #if DEBUG
 UINT Receive_Data(LPVOID lpVoid)
 {
@@ -671,7 +806,10 @@ UINT Receive_Data(LPVOID lpVoid)
         float period = debugWavePeriod * realTimeSamplingRate;
         for (unsigned i = 0; i < DATA_SIZE; i++)
         {
-            waveData[i] = debugWaveRange / 2 * sin((float)i * 6.2832f / period + timeValue) + debugWaveOffset;
+            float noise = 1;
+            if (threeDim)
+                noise = Gaussian_noise(1, 0.2);
+            waveData[i] = noise * debugWaveRange / 2 * sin((float)i * 6.2832f / period + timeValue) + debugWaveOffset;
         }
         dataProcessing();
         Sleep(500);

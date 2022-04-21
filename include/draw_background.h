@@ -35,6 +35,7 @@ public:
     bool ifTrig;
     bool ifOverSampling;
     bool ifTrigAverage;
+    bool ifThreeDim;
     glm::vec3 borderColor;
     glm::vec3 gridColor;
     glm::vec3 trigLineColor;

@@ -24,7 +24,7 @@ void WaveRenderer::ResetWaveData(float *waveFormData, unsigned int size)
     this->dataSize = size;
     glBindVertexArray(this->VAO);
     glBindBuffer(GL_ARRAY_BUFFER, this->VBO);
-    glBufferData(GL_ARRAY_BUFFER, size * 8, waveFormData, GL_STREAM_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, size * 2 * sizeof(float), waveFormData, GL_STREAM_DRAW);
 
     // position attribute
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void *)0);
