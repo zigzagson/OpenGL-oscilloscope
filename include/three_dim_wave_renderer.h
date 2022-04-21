@@ -11,14 +11,18 @@
 class ThreeDimWaveRenderer
 {
 public:
-    Shader WaveShader;
+    Shader SingleColorWaveShader;
+    Shader MultiColorWaveShader;
     ThreeDimWaveRenderer() {}
-    ThreeDimWaveRenderer(const char *vertexPath, const char *fragmentPath);
-    void WaveRenderInit(const char *vertexPath, const char *fragmentPath);
+    void WaveRenderInit();
     void SetWaveAttribute(GLuint viewSize, float dataMin, float dataMax);
-    void SetColorAttribute(glm::vec3 beginColor, glm::vec3 endColor, int maxGrade);
+    void SetBackgroundColor(glm::vec3 backgroundColor);
+    void SetColorGrade(int maxColorGrade);
+    void SetColorAttribute(glm::vec3 beginColor, glm::vec3 endColor);
+    void SetColorAttribute(glm::vec3 beginColor, glm::vec3 secondColor, glm::vec3 thirdColor,
+                           glm::vec3 fourthColor, glm::vec3 endColor);
     void ResetWaveData(float *waveFormData, unsigned int size);
-    void RenderWave(glm::vec2 offset, float xStep, float yScale);
+    void RenderWave(glm::vec2 offset, float xStep, float yScale, bool ifMultiColor);
 
 private:
     // Render state

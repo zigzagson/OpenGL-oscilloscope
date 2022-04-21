@@ -8,13 +8,14 @@ void BackgroundRender::BackgroundRenderInit(float scrWidth, float scrHeight)
     this->iconTexture.Generate("img/uestc_icon.png", GL_RGBA);
     this->volBox.InputBoxInit();
     this->timeBox.InputBoxInit();
+    this->gradeBox.InputBoxInit();
     this->iconTexture.color = glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);
     this->fontSize = (GLuint)(scrWidth / 240) * 4;
     this->valueFontPath = "fonts/ARLRDBD.TTF";
     this->valueText.Load(valueFontPath, this->fontSize);
     this->valueText.LoadChinese((wchar_t *)L"攀登计划", "fonts/兰亭序书法字体.ttf", this->fontSize * 2);
     this->valueText.LoadChinese((wchar_t *)L"周碧松张震籍北", "fonts/FZKTK.TTF", this->fontSize);
-    this->valueText.LoadChinese((wchar_t *)L"普通平均过采样三维模式", "fonts/simsun.ttc", this->fontSize);
+    this->valueText.LoadChinese((wchar_t *)L"普通平均过采样三维模式单多色系灰度等级", "fonts/simsun.ttc", this->fontSize);
     this->borderColor = glm::vec3(0.9f, 0.9f, 0.9f);
     this->gridColor = glm::vec3(0.6f, 0.6f, 0.6f);
     this->trigLineColor = glm::vec3(0.9f, 0.3f, 0.1f);
@@ -138,11 +139,12 @@ void BackgroundRender::setSize(float scrWidth, float scrHeight, float viewportX,
     this->valueText.ClearChinese();
     this->valueText.LoadChinese((wchar_t *)L"攀登计划", "fonts/兰亭序书法字体.ttf", this->fontSize * 2);
     this->valueText.LoadChinese((wchar_t *)L"周碧松张震籍北", "fonts/FZKTK.TTF", this->fontSize);
-    this->valueText.LoadChinese((wchar_t *)L"普通平均过采样三维模式", "fonts/simsun.ttc", this->fontSize);
+    this->valueText.LoadChinese((wchar_t *)L"普通平均过采样三维模式单多色系灰度等级", "fonts/simsun.ttc", this->fontSize);
     this->iconTexture.SetProjection(scrWidth, scrHeight);
     this->iconTexture.SetPosition(scrWidth * 0.84f, scrHeight - scrWidth * 0.16f, scrWidth * 0.12f, scrWidth * 0.12f);
     this->volBox.setPosition(scrWidth, scrHeight, viewportX * 1.886, viewportY * 0.42 - this->fontSize / 2, this->fontSize * 2.4, this->fontSize);
     this->timeBox.setPosition(scrWidth, scrHeight, viewportX * 3.94, viewportY * 0.42 - this->fontSize / 2, this->fontSize * 1.8, this->fontSize);
+    this->gradeBox.setPosition(scrWidth, scrHeight, this->scrWidth * 0.907, this->scrHeight * 0.504, this->fontSize * 1.8 * 1.2, this->fontSize * 1.2);
 }
 void BackgroundRender::drawBackground(float xStep, float yScale, float offset, float trigLevel)
 {
@@ -280,6 +282,20 @@ void BackgroundRender::drawBackground(float xStep, float yScale, float offset, f
     if (this->ifThreeDim)
     {
         this->valueText.RenderChinese((wchar_t *)L"三维模式", this->scrWidth * 0.82, this->scrHeight * 0.61, 1.2f, this->textColor);
+        if (this->ifMultiColor)
+            this->valueText.RenderChinese((wchar_t *)L"多色系", this->scrWidth * 0.82, this->scrHeight * 0.56, 1.2f, this->textColor);
+        else
+            this->valueText.RenderChinese((wchar_t *)L"单色系", this->scrWidth * 0.82, this->scrHeight * 0.56, 1.2f, this->textColor);
+        this->valueText.RenderChinese((wchar_t *)L"灰度等级", this->scrWidth * 0.82, this->scrHeight * 0.51, 1.2f, this->textColor);
+        this->valueText.RenderText(":" + std::to_string(this->maxColorGrade), this->scrWidth * 0.9, this->scrHeight * 0.51, 1.2f, this->textColor);
+        if (this->gradeBox.ifInputBoxShow == true)
+        {
+            this->gradeBox.RenderInputBox();
+            std::string value = this->gradeBox.valueString;
+            if (value.length() >= 3)
+                value = value.substr(value.length() - 3);
+            this->valueText.RenderText(value, this->scrWidth * 0.908, this->scrHeight * 0.51, 1.2f, glm::vec3(0.1f, 0.1f, 0.1f));
+        }
     }
     else
     {

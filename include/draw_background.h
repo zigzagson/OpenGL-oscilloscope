@@ -26,7 +26,7 @@ public:
     Shader dashedShader;
     TextRenderer valueText;
     Texture2D iconTexture;
-    InputBox volBox, timeBox;
+    InputBox volBox, timeBox, gradeBox;
     BackgroundRender() {}
     void BackgroundRenderInit(float scrWidth, float scrHeight);
     void drawBackground(float xStep, float yScale, float offset, float trigLevel);
@@ -36,6 +36,8 @@ public:
     bool ifOverSampling;
     bool ifTrigAverage;
     bool ifThreeDim;
+    bool ifMultiColor;
+    int maxColorGrade;
     glm::vec3 borderColor;
     glm::vec3 gridColor;
     glm::vec3 trigLineColor;
