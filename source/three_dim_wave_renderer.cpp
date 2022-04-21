@@ -3,14 +3,11 @@
 #include "three_dim_wave_renderer.h"
 
 unsigned int indices[511 * 1023 * 6];
-ThreeDimWaveRenderer::ThreeDimWaveRenderer(const char *vertexPath, const char *fragmentPath)
-{
-    WaveRenderInit(vertexPath, fragmentPath);
-}
-void ThreeDimWaveRenderer::WaveRenderInit(const char *vertexPath, const char *fragmentPath)
+void ThreeDimWaveRenderer::WaveRenderInit()
 {
     // Load and configure shader
-    this->WaveShader.Compile(vertexPath, fragmentPath);
+    this->SingleColorWaveShader.Compile("shader/colorwave.vs", "shader/colorwave.fs");
+    this->MultiColorWaveShader.Compile("shader/colorfulwave.vs", "shader/colorfulwave.fs");
     glGenVertexArrays(1, &this->VAO);
     glGenBuffers(1, &this->VBO);
     glGenBuffers(1, &this->EBO);
@@ -36,13 +33,35 @@ void ThreeDimWaveRenderer::SetWaveAttribute(GLuint viewSize, float dataMin, floa
     this->dataMin = dataMin;
     this->dataMax = dataMax;
 }
-void ThreeDimWaveRenderer::SetColorAttribute(glm::vec3 beginColor, glm::vec3 endColor, int maxGrade)
+void ThreeDimWaveRenderer::SetColorGrade(int maxColorGrade)
 {
-    this->WaveShader.Use();
-    glBindVertexArray(this->VAO);
-    this->WaveShader.SetVector3f("beginColor", beginColor);
-    this->WaveShader.SetVector3f("endColor", endColor);
-    this->WaveShader.SetInteger("maxGrade", maxGrade);
+    this->SingleColorWaveShader.Use();
+    this->SingleColorWaveShader.SetInteger("maxGrade", maxColorGrade);
+    this->MultiColorWaveShader.Use();
+    this->MultiColorWaveShader.SetInteger("maxGrade", maxColorGrade);
+}
+void ThreeDimWaveRenderer::SetBackgroundColor(glm::vec3 backgroundColor)
+{
+    this->SingleColorWaveShader.Use();
+    this->SingleColorWaveShader.SetVector3f("backgroundColor", backgroundColor);
+    this->MultiColorWaveShader.Use();
+    this->MultiColorWaveShader.SetVector3f("backgroundColor", backgroundColor);
+}
+void ThreeDimWaveRenderer::SetColorAttribute(glm::vec3 beginColor, glm::vec3 endColor)
+{
+    this->SingleColorWaveShader.Use();
+    this->SingleColorWaveShader.SetVector3f("beginColor", beginColor);
+    this->SingleColorWaveShader.SetVector3f("endColor", endColor);
+}
+void ThreeDimWaveRenderer::SetColorAttribute(glm::vec3 beginColor, glm::vec3 secondColor, glm::vec3 thirdColor,
+                                             glm::vec3 fourthColor, glm::vec3 endColor)
+{
+    this->MultiColorWaveShader.Use();
+    this->MultiColorWaveShader.SetVector3f("beginColor", beginColor);
+    this->MultiColorWaveShader.SetVector3f("secondColor", secondColor);
+    this->MultiColorWaveShader.SetVector3f("thirdColor", thirdColor);
+    this->MultiColorWaveShader.SetVector3f("fourthColor", fourthColor);
+    this->MultiColorWaveShader.SetVector3f("endColor", endColor);
 }
 void ThreeDimWaveRenderer::ResetWaveData(float *waveFormData, unsigned int size)
 {
@@ -56,7 +75,7 @@ void ThreeDimWaveRenderer::ResetWaveData(float *waveFormData, unsigned int size)
 
     glEnableVertexAttribArray(0);
 }
-void ThreeDimWaveRenderer::RenderWave(glm::vec2 offset, float xStep, float yScale)
+void ThreeDimWaveRenderer::RenderWave(glm::vec2 offset, float xStep, float yScale, bool ifMultiColor)
 {
     float start = -(offset.x + xStep / 2) * this->viewSize + this->dataSize / 2; //缩放时中间不动，初始展示波形中间数据
     float end = start + this->viewSize * xStep;
@@ -68,9 +87,17 @@ void ThreeDimWaveRenderer::RenderWave(glm::vec2 offset, float xStep, float yScal
         start = 0;
     if (end > this->dataSize)
         end = this->dataSize;
-    this->WaveShader.Use();
+    if (ifMultiColor)
+    {
+        this->MultiColorWaveShader.Use();
+        this->MultiColorWaveShader.SetMatrix4fv("projection", projection);
+    }
+    else
+    {
+        this->SingleColorWaveShader.Use();
+        this->SingleColorWaveShader.SetMatrix4fv("projection", projection);
+    }
     glBindVertexArray(this->VAO);
-    this->WaveShader.SetMatrix4fv("projection", projection);
     // glDrawArrays(GL_POINTS, 0, 1024 * 512);
     glDrawElements(GL_TRIANGLES, 6 * 511 * 1023, GL_UNSIGNED_INT, 0);
 }

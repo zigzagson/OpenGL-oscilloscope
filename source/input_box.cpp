@@ -40,9 +40,23 @@ void InputBox::RenderInputBox()
     this->boxShader.SetMatrix4fv("projection", projection);
     glDrawArrays(GL_LINE_LOOP, 0, 4);
 }
-void InputBox::TypeInCharacter(char key)
+void InputBox::TypeIn(int key)
 {
-    this->valueString += key;
+    if (!this->ifInputBoxShow)
+        return;
+    if (key == GLFW_KEY_ESCAPE)
+    {
+        this->exitInputBox();
+    }
+    else if (key == GLFW_KEY_BACKSPACE)
+    {
+        if (this->valueString.length() > 0)
+            this->valueString.erase(this->valueString.length() - 1);
+    }
+    else if (key >= GLFW_KEY_0 && key <= GLFW_KEY_9)
+    {
+        this->valueString += key;
+    }
 }
 float InputBox::getInputValue()
 {

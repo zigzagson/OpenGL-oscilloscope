@@ -2,6 +2,7 @@
 #define INPUT_BOX_H
 
 #include <glad/glad.h>
+#include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -20,7 +21,7 @@ public:
     void InputBoxInit();
     void setPosition(float scrW, float scrH, float posX, float posY, float posW, float posH);
     void RenderInputBox();
-    void TypeInCharacter(char key);
+    void TypeIn(int key);
     float getInputValue();
     void exitInputBox();
 

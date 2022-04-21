@@ -63,6 +63,9 @@ bool waveTrig = false;
 bool trigAverage = false; //多次触发图像做平均
 bool wavePause = false;
 bool threeDim = false;
+bool multiColor = false;
+
+int maxColorGrade = 32;
 
 int autoPeriodNum = 3;
 int autoVoltageNum = 6;
@@ -120,7 +123,7 @@ void drawWaveForm()
     {
         if (!wavePause)
             wave3d.ResetWaveData(threeDimWaveData, sizeof(threeDimWaveData));
-        wave3d.RenderWave(offsetState + offset, timeStep * samplingRate, scaleState);                          //画波形
+        wave3d.RenderWave(offsetState + offset, timeStep * samplingRate, scaleState, multiColor);              //画波形
         background.drawBackground(timeStep, scaleState, offsetState.y + offset.y, trigLevel + trigLevelState); //画网格
     }
     else
@@ -160,11 +163,19 @@ void windowInit()
     }
     wave.WaveRenderInit("shader/wave.vs", "shader/wave.fs");
     wave.SetWaveAttribute(TIME_DIVS, -5000, 5000);
-    wave3d.WaveRenderInit("shader/colorfulwave.vs", "shader/colorfulwave.fs");
+    wave3d.WaveRenderInit();
     wave3d.SetWaveAttribute(TIME_DIVS, -5000, 5000);
-    wave3d.SetColorAttribute(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 0.0f), 32);
+    wave3d.SetColorGrade(maxColorGrade);
+    wave3d.SetBackgroundColor(glm::vec3(0.0f, 0.0f, 0.0f));
+    wave3d.SetColorAttribute(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 0.0f));
+    wave3d.SetColorAttribute(glm::vec3(0.0f, 0.0f, 1.0f),
+                             glm::vec3(0.0f, 1.0f, 1.0f),
+                             glm::vec3(0.0f, 1.0f, 0.0f),
+                             glm::vec3(1.0f, 1.0f, 0.0f),
+                             glm::vec3(1.0f, 0.0f, 0.0f));
     background.BackgroundRenderInit(scrWidth, scrHeight);
     background.setSize(scrWidth, scrHeight, scrWidth * 0.1, scrHeight * 0.06, viewWidth, viewHeight);
+    background.maxColorGrade = maxColorGrade;
 }
 void configurationInit()
 {
@@ -199,11 +210,19 @@ void configurationInit()
         color["trig"].append(0.1f);
         wave_3d["begin"].append(0.0f);
         wave_3d["begin"].append(0.0f);
-        wave_3d["begin"].append(0.0f);
-        wave_3d["end"].append(1.0f);
+        wave_3d["begin"].append(1.0f);
+        wave_3d["second"].append(0.0f);
+        wave_3d["second"].append(1.0f);
+        wave_3d["second"].append(1.0f);
+        wave_3d["third"].append(0.0f);
+        wave_3d["third"].append(1.0f);
+        wave_3d["third"].append(0.0f);
+        wave_3d["fourth"].append(1.0f);
+        wave_3d["fourth"].append(1.0f);
+        wave_3d["fourth"].append(0.0f);
         wave_3d["end"].append(1.0f);
         wave_3d["end"].append(0.0f);
-        wave_3d["grade"] = 32;
+        wave_3d["end"].append(0.0f);
         color["wave3d"] = wave_3d;
         root["color"] = color;
         root["rate"] = realTimeSamplingRate;
@@ -274,10 +293,16 @@ void configurationInit()
         color["trig"][2].asFloat());
     background.iconTexture.color = iconColor;
     Json::Value wave_3d = color["wave3d"];
+    wave3d.SetBackgroundColor(backgroundColor);
     wave3d.SetColorAttribute(
         glm::vec3(wave_3d["begin"][0].asFloat(), wave_3d["begin"][1].asFloat(), wave_3d["begin"][2].asFloat()),
-        glm::vec3(wave_3d["end"][0].asFloat(), wave_3d["end"][1].asFloat(), wave_3d["end"][2].asFloat()),
-        wave_3d["grade"].asInt());
+        glm::vec3(wave_3d["end"][0].asFloat(), wave_3d["end"][1].asFloat(), wave_3d["end"][2].asFloat()));
+    wave3d.SetColorAttribute(
+        glm::vec3(wave_3d["begin"][0].asFloat(), wave_3d["begin"][1].asFloat(), wave_3d["begin"][2].asFloat()),
+        glm::vec3(wave_3d["second"][0].asFloat(), wave_3d["second"][1].asFloat(), wave_3d["second"][2].asFloat()),
+        glm::vec3(wave_3d["third"][0].asFloat(), wave_3d["third"][1].asFloat(), wave_3d["third"][2].asFloat()),
+        glm::vec3(wave_3d["fourth"][0].asFloat(), wave_3d["fourth"][1].asFloat(), wave_3d["fourth"][2].asFloat()),
+        glm::vec3(wave_3d["end"][0].asFloat(), wave_3d["end"][1].asFloat(), wave_3d["end"][2].asFloat()));
     ifs.close();
 }
 
@@ -350,29 +375,49 @@ void mouse_press_callback(GLFWwindow *window, int button, int action, int mods)
             trigAverage = !trigAverage;
             background.ifTrigAverage = trigAverage;
         }
-        if (posX > scrWidth * 0.82 && posX < scrWidth * 0.88 && posY > scrHeight * 0.36 && posY < scrHeight * 0.39) //是否三维映射
+        if (posX > scrWidth * 0.82 && posX < scrWidth * 0.9 && posY > scrHeight * 0.36 && posY < scrHeight * 0.39) //是否三维映射
         {
             threeDim = !threeDim;
             background.ifThreeDim = threeDim;
+        }
+        if (posX > scrWidth * 0.82 && posX < scrWidth * 0.88 && posY > scrHeight * 0.41 && posY < scrHeight * 0.44) //单色系或多色系
+        {
+            if (threeDim)
+            {
+                multiColor = !multiColor;
+                background.ifMultiColor = multiColor;
+            }
+        }
+        if (posX > scrWidth * 0.9 && posX < scrWidth * 0.95 && posY > scrHeight * 0.46 && posY < scrHeight * 0.5) //灰度等级输入
+        {
+            if (threeDim)
+            {
+                background.gradeBox.ifInputBoxShow = true;
+            }
+        }
+        else
+        {
+            background.gradeBox.exitInputBox();
         }
         if (Rsquare < scrWidth * 0.06 * scrWidth * 0.06)
         {
             background.iconTexture.color = iconClickColor;
             waveAutoSet(); //左键点图标autoset
         }
-        if (posX > scrWidth * 0.18 && posX < scrWidth * 0.26 && posY > scrHeight * 0.95 && posY < scrHeight * 0.99) //电压参数输入
+        if (posX > scrWidth * 0.18 && posX < scrWidth * 0.24 && posY > scrHeight * 0.95 && posY < scrHeight * 0.99) //电压参数输入
         {
             background.volBox.ifInputBoxShow = true;
-            background.timeBox.exitInputBox();
-        }
-        else if (posX > scrWidth * 0.38 && posX < scrWidth * 0.44 && posY > scrHeight * 0.95 && posY < scrHeight * 0.99) //时基参数输入
-        {
-            background.timeBox.ifInputBoxShow = true;
-            background.volBox.exitInputBox();
         }
         else
         {
             background.volBox.exitInputBox();
+        }
+        if (posX > scrWidth * 0.38 && posX < scrWidth * 0.44 && posY > scrHeight * 0.95 && posY < scrHeight * 0.99) //时基参数输入
+        {
+            background.timeBox.ifInputBoxShow = true;
+        }
+        else
+        {
             background.timeBox.exitInputBox();
         }
     }
@@ -427,14 +472,12 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
 {
     if (action == GLFW_RELEASE)
     {
-        if (key == GLFW_KEY_ESCAPE)
+        background.volBox.TypeIn(key);
+        background.timeBox.TypeIn(key);
+        background.gradeBox.TypeIn(key);
+        if (key == GLFW_KEY_ENTER)
         {
-            background.volBox.exitInputBox();
-            background.timeBox.exitInputBox();
-        }
-        if (background.volBox.ifInputBoxShow)
-        {
-            if (key == GLFW_KEY_ENTER)
+            if (background.volBox.ifInputBoxShow)
             {
                 scaleState = 1000.0f / background.volBox.getInputValue();
                 background.volBox.exitInputBox();
@@ -443,21 +486,17 @@ void key_callback(GLFWwindow *window, int key, int scancode, int action, int mod
                 if (scaleState < 0.5)
                     scaleState = 0.5;
             }
-            else if (key >= GLFW_KEY_0 && key <= GLFW_KEY_9)
-            {
-                background.volBox.TypeInCharacter(key);
-            }
-        }
-        if (background.timeBox.ifInputBoxShow)
-        {
-            if (key == GLFW_KEY_ENTER)
+            if (background.timeBox.ifInputBoxShow)
             {
                 timeStep = background.timeBox.getInputValue();
                 background.timeBox.exitInputBox();
             }
-            else if (key >= GLFW_KEY_0 && key <= GLFW_KEY_9)
+            if (background.gradeBox.ifInputBoxShow)
             {
-                background.timeBox.TypeInCharacter(key);
+                maxColorGrade = background.gradeBox.getInputValue();
+                background.maxColorGrade = maxColorGrade;
+                wave3d.SetColorGrade(maxColorGrade);
+                background.gradeBox.exitInputBox();
             }
         }
     }
