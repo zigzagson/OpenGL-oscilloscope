@@ -65,7 +65,7 @@ bool wavePause = false;
 bool threeDim = false;
 bool multiColor = false;
 
-int maxColorGrade = 32;
+int maxColorGrade = 32; //最大颜色等级
 
 int autoPeriodNum = 3;
 int autoVoltageNum = 6;
@@ -624,7 +624,8 @@ void dataTrig()
     }
     for (int i = VIEW_DATA_SIZE / 2; i < dataSize - VIEW_DATA_SIZE / 2; i++)
     {
-        if ((waveData[i] > level) && (waveData[i - 1] < level))
+        if ((waveData[i + 2] > level) && (waveData[i + 1] > level) && (waveData[i] > level) &&
+            (waveData[i - 1] < level) && (waveData[i - 2] < level) && (waveData[i - 3] < level))
         {
             for (int j = 0; j < VIEW_DATA_SIZE; j++) //触发点在波形数据中间
             {
@@ -658,7 +659,8 @@ void dataTrig_direct()
     int trigNum = 0;
     for (int i = VIEW_DATA_SIZE / 2; i < dataSize - VIEW_DATA_SIZE / 2; i++)
     {
-        if ((waveData[i] > level) && (waveData[i - 1] < level))
+        if ((waveData[i + 2] > level) && (waveData[i + 1] > level) && (waveData[i] > level) &&
+            (waveData[i - 1] < level) && (waveData[i - 2] < level) && (waveData[i - 3] < level))
         {
             for (int j = 0; j < VIEW_DATA_SIZE; j++) //触发点在波形数据中间
             {
@@ -689,7 +691,8 @@ void threeDimWavaDataMapper()
     memset(threeDimDataBase, 0, sizeof(threeDimDataBase));
     for (int i = 1024 / 2; i < dataSize - 1024 / 2; i++)
     {
-        if ((waveData[i] > level) && (waveData[i - 1] < level))
+        if ((waveData[i + 2] > level) && (waveData[i + 1] > level) && (waveData[i] > level) &&
+            (waveData[i - 1] < level) && (waveData[i - 2] < level) && (waveData[i - 3] < level))
         {
             for (int j = 0; j < 1024; j++) //触发点在波形数据中间
             {
